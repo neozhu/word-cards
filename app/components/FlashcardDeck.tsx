@@ -10,6 +10,14 @@ type Props = {
   cards: FlashcardItem[];
 };
 
+type TtsUrls = {
+  wordAudioUrl: string;
+  phraseAudioUrl: string;
+};
+
+const TTS_URLS_CACHE_MAX_ENTRIES = 200;
+const TAP_THROTTLE_MS = 250;
+
 function sleep(ms: number) {
   return new Promise<void>((resolve) => setTimeout(resolve, ms));
 }
@@ -34,6 +42,13 @@ export default function FlashcardDeck({ cards }: Props) {
   const isPlayingRef = useRef(false);
   const didDragRef = useRef(false);
 
+  // Dedupes /api/tts requests per card id.
+  const ttsInflightRef = useRef(new Map<string, Promise<TtsUrls | null>>());
+  // Caches successful /api/tts results per card id.
+  const ttsCacheRef = useRef(new Map<string, TtsUrls>());
+  // Prevents rapid multi-tap from re-triggering playback.
+  const lastTapAtRef = useRef(new Map<string, number>());
+
   const count = cards.length;
   const card = cards[index];
 
@@ -42,43 +57,90 @@ export default function FlashcardDeck({ cards }: Props) {
     return Math.round(((index + 1) / count) * 100);
   }, [count, index]);
 
+  function rememberTtsUrls(cardId: string, urls: TtsUrls) {
+    ttsCacheRef.current.set(cardId, urls);
+    while (ttsCacheRef.current.size > TTS_URLS_CACHE_MAX_ENTRIES) {
+      const oldestKey = ttsCacheRef.current.keys().next().value as
+        | string
+        | undefined;
+      if (!oldestKey) break;
+      ttsCacheRef.current.delete(oldestKey);
+    }
+  }
+
+  async function fetchTtsUrls(cardId: string): Promise<TtsUrls | null> {
+    const url = `/api/tts?id=${encodeURIComponent(cardId)}`;
+    const res = await fetch(url, {
+      method: "GET",
+      headers: { Accept: "application/json" },
+      cache: "force-cache",
+    });
+
+    if (!res.ok) {
+      try {
+        const errorPayload = (await res.json()) as { error?: string };
+        console.warn("/api/tts failed", res.status, errorPayload?.error);
+      } catch {
+        console.warn("/api/tts failed", res.status);
+      }
+      return null;
+    }
+
+    const payload = (await res.json()) as {
+      wordAudioUrl?: string;
+      phraseAudioUrl?: string;
+    };
+
+    const wordAudioUrl = payload.wordAudioUrl ?? null;
+    const phraseAudioUrl = payload.phraseAudioUrl ?? null;
+    if (!wordAudioUrl || !phraseAudioUrl) return null;
+
+    return { wordAudioUrl, phraseAudioUrl };
+  }
+
+  async function getTtsUrls(cardId: string): Promise<TtsUrls | null> {
+    const cached = ttsCacheRef.current.get(cardId);
+    if (cached) return cached;
+
+    const inflight = ttsInflightRef.current.get(cardId);
+    if (inflight) return inflight;
+
+    const promise = (async () => {
+      try {
+        const urls = await fetchTtsUrls(cardId);
+        if (urls) rememberTtsUrls(cardId, urls);
+        return urls;
+      } finally {
+        ttsInflightRef.current.delete(cardId);
+      }
+    })();
+
+    ttsInflightRef.current.set(cardId, promise);
+    return promise;
+  }
+
   async function playCurrent() {
-    if (!card) return;
+    const cardToPlay = card;
+    if (!cardToPlay) return;
+
+    const now = Date.now();
+    const last = lastTapAtRef.current.get(cardToPlay.id) ?? 0;
+    if (now - last < TAP_THROTTLE_MS) return;
+    lastTapAtRef.current.set(cardToPlay.id, now);
+
     if (isPlayingRef.current) return;
 
     isPlayingRef.current = true;
     try {
-      const url = `/api/tts?id=${encodeURIComponent(card.id)}`;
-      const res = await fetch(url, {
-        method: "GET",
-        headers: { Accept: "application/json" },
-        cache: "force-cache",
-      });
+      const urls = await getTtsUrls(cardToPlay.id);
+      if (!urls) return;
 
-      if (!res.ok) {
-        try {
-          const errorPayload = (await res.json()) as { error?: string };
-          console.warn("/api/tts failed", res.status, errorPayload?.error);
-        } catch {
-          console.warn("/api/tts failed", res.status);
-        }
-        return;
-      }
+      // Avoid playing the wrong card after a quick swipe.
+      if (cards[index]?.id !== cardToPlay.id) return;
 
-      const payload = (await res.json()) as {
-        mimeType: string;
-        wordAudioUrl?: string;
-        phraseAudioUrl?: string;
-      };
-
-      const wordSrc = payload.wordAudioUrl ?? null;
-      const phraseSrc = payload.phraseAudioUrl ?? null;
-
-      if (!wordSrc || !phraseSrc) return;
-
-      await playAudioSrc(wordSrc);
+      await playAudioSrc(urls.wordAudioUrl);
       await sleep(500);
-      await playAudioSrc(phraseSrc);
+      await playAudioSrc(urls.phraseAudioUrl);
     } catch {
       // Safe no-op: avoid extra UI or modals.
     } finally {
