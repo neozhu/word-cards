@@ -14,9 +14,9 @@ function sleep(ms: number) {
   return new Promise<void>((resolve) => setTimeout(resolve, ms));
 }
 
-async function playDataUriAudio(dataUri: string): Promise<void> {
+async function playAudioSrc(src: string): Promise<void> {
   await new Promise<void>((resolve, reject) => {
-    const audio = new Audio(dataUri);
+    const audio = new Audio(src);
     audio.onended = () => resolve();
     audio.onerror = () => reject(new Error("Audio playback failed"));
 
@@ -48,10 +48,11 @@ export default function FlashcardDeck({ cards }: Props) {
 
     isPlayingRef.current = true;
     try {
-      const res = await fetch("/api/tts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ word: card.word, phrase: card.phrase }),
+      const url = `/api/tts?id=${encodeURIComponent(card.id)}`;
+      const res = await fetch(url, {
+        method: "GET",
+        headers: { Accept: "application/json" },
+        cache: "force-cache",
       });
 
       if (!res.ok) {
@@ -66,17 +67,18 @@ export default function FlashcardDeck({ cards }: Props) {
 
       const payload = (await res.json()) as {
         mimeType: string;
-        wordAudioBase64: string;
-        phraseAudioBase64: string;
+        wordAudioUrl?: string;
+        phraseAudioUrl?: string;
       };
 
-      const mimeType = payload.mimeType || "audio/mpeg";
-      const wordUri = `data:${mimeType};base64,${payload.wordAudioBase64}`;
-      const phraseUri = `data:${mimeType};base64,${payload.phraseAudioBase64}`;
+      const wordSrc = payload.wordAudioUrl ?? null;
+      const phraseSrc = payload.phraseAudioUrl ?? null;
 
-      await playDataUriAudio(wordUri);
+      if (!wordSrc || !phraseSrc) return;
+
+      await playAudioSrc(wordSrc);
       await sleep(500);
-      await playDataUriAudio(phraseUri);
+      await playAudioSrc(phraseSrc);
     } catch {
       // Safe no-op: avoid extra UI or modals.
     } finally {

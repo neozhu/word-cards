@@ -1,18 +1,24 @@
 import { GoogleGenAI } from "@google/genai";
 import { NextResponse } from "next/server";
+import content from "@/content.json";
+import { createHash } from "node:crypto";
+import { BlobNotFoundError, head, put } from "@vercel/blob";
 
 export const runtime = "nodejs";
 
 export const maxDuration = 30;
 
+const TTS_MODEL = "gemini-2.5-flash-preview-tts";
+const BLOB_CACHE_MAX_AGE_SECONDS = 60 * 60 * 24 * 365;
+
 type TtsCacheEntry = {
-  base64: string;
+  wav: Buffer;
   createdAt: number;
 };
 
 type TtsCacheState = {
   audioByKey: Map<string, TtsCacheEntry>;
-  inflightByKey: Map<string, Promise<string>>;
+  inflightByKey: Map<string, Promise<Buffer>>;
 };
 
 declare global {
@@ -25,7 +31,7 @@ function getCache(): TtsCacheState {
   if (!globalThis.__wordCardsTtsCache) {
     globalThis.__wordCardsTtsCache = {
       audioByKey: new Map<string, TtsCacheEntry>(),
-      inflightByKey: new Map<string, Promise<string>>(),
+      inflightByKey: new Map<string, Promise<Buffer>>(),
     };
   }
   return globalThis.__wordCardsTtsCache;
@@ -37,8 +43,8 @@ function makeCacheKey(voice: string, text: string): string {
   return `${voice}::${normalizedText}`;
 }
 
-function remember(cache: TtsCacheState, key: string, base64: string) {
-  cache.audioByKey.set(key, { base64, createdAt: Date.now() });
+function remember(cache: TtsCacheState, key: string, wav: Buffer) {
+  cache.audioByKey.set(key, { wav, createdAt: Date.now() });
   while (cache.audioByKey.size > CACHE_MAX_ENTRIES) {
     const oldestKey = cache.audioByKey.keys().next().value as string | undefined;
     if (!oldestKey) break;
@@ -50,6 +56,106 @@ type TtsRequestBody = {
   word?: string;
   phrase?: string;
 };
+
+type ContentEntry = {
+  word: string;
+  phrase: string;
+};
+
+function makeStrongEtag(input: string): string {
+  // Strong ETag based on inputs (not response bytes) to avoid hashing large base64.
+  // Good enough for cache validation and dedupe.
+  const digest = createHash("sha256").update(input).digest("hex");
+  return `"${digest}"`;
+}
+
+function toSafePathSegment(input: string): string {
+  return input
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "-")
+    .replace(/[^a-z0-9._-]/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^[-.]+|[-.]+$/g, "")
+    .slice(0, 80);
+}
+
+function makeBlobPathname(params: {
+  id: string;
+  voice: string;
+  kind: "word" | "phrase";
+  text: string;
+}): string {
+  const normalizedText = params.text.trim().replace(/\s+/g, " ");
+  const voice = toSafePathSegment(params.voice) || "voice";
+  const id = toSafePathSegment(params.id) || "card";
+  const hash = createHash("sha256")
+    .update(`${TTS_MODEL}::${params.voice}::${normalizedText}`)
+    .digest("hex")
+    .slice(0, 16);
+
+  // Versioned prefix so we can change format later without collisions.
+  return `tts/v1/${voice}/${id}/${params.kind}-${hash}.wav`;
+}
+
+async function getOrCreateBlobUrl(params: {
+  id: string;
+  voice: string;
+  kind: "word" | "phrase";
+  text: string;
+}): Promise<string> {
+  const pathname = makeBlobPathname(params);
+
+  try {
+    const meta = await head(pathname);
+    return meta.url;
+  } catch (err) {
+    if (!(err instanceof BlobNotFoundError)) {
+      throw err;
+    }
+  }
+
+  // Miss: generate once, then upload.
+  const wavBuffer = await getOrSynthesizeWavBuffer(params.text, params.voice);
+
+  try {
+    const uploaded = await put(pathname, wavBuffer, {
+      access: "public",
+      addRandomSuffix: false,
+      allowOverwrite: false,
+      contentType: "audio/wav",
+      cacheControlMaxAge: BLOB_CACHE_MAX_AGE_SECONDS,
+    });
+    return uploaded.url;
+  } catch {
+    // Likely a race where another request uploaded first.
+    const meta = await head(pathname);
+    return meta.url;
+  }
+}
+
+function withCacheHeaders(res: NextResponse, etagSeed: string) {
+  res.headers.set("ETag", makeStrongEtag(etagSeed));
+  // Enable browser + CDN caching. TTS is deterministic enough for flashcards.
+  res.headers.set(
+    "Cache-Control",
+    "public, max-age=604800, s-maxage=604800, stale-while-revalidate=86400",
+  );
+  return res;
+}
+
+function getVoiceName(): string {
+  return (process.env.TTS_VOICE_NAME || "Kore").trim() || "Kore";
+}
+
+function lookupById(id: string): { word: string; phrase: string } | null {
+  const entry = (content as unknown as Record<string, ContentEntry>)[id];
+  if (!entry) return null;
+  const word = (entry.word || "").trim();
+  const phrase = (entry.phrase || "").trim();
+  if (!word || !phrase) return null;
+  return { word, phrase };
+}
 
 function getGeminiApiKey(): string | null {
   const key = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
@@ -117,7 +223,7 @@ function extractInlineAudioBase64(response: unknown): string | null {
   return null;
 }
 
-async function synthesizeWavBase64(text: string, voice: string) {
+async function synthesizeWavBuffer(text: string, voice: string) {
   const apiKey = getGeminiApiKey();
   if (!apiKey) {
     throw new Error("Missing GOOGLE_GENERATIVE_AI_API_KEY environment variable");
@@ -126,7 +232,7 @@ async function synthesizeWavBase64(text: string, voice: string) {
   const ai = new GoogleGenAI({ apiKey });
 
   const response = await ai.models.generateContent({
-    model: "gemini-2.5-flash-preview-tts",
+    model: TTS_MODEL,
     contents: [{ parts: [{ text }] }],
     config: {
       responseModalities: ["AUDIO"],
@@ -146,26 +252,24 @@ async function synthesizeWavBase64(text: string, voice: string) {
 
   const pcmBuffer = Buffer.from(audioData, "base64");
   const wavHeader = createWavHeader(pcmBuffer.length);
-  const wavBuffer = Buffer.concat([wavHeader, pcmBuffer]);
-
-  return wavBuffer.toString("base64");
+  return Buffer.concat([wavHeader, pcmBuffer]);
 }
 
-async function getOrSynthesizeWavBase64(text: string, voice: string) {
+async function getOrSynthesizeWavBuffer(text: string, voice: string) {
   const cache = getCache();
   const key = makeCacheKey(voice, text);
 
   const cached = cache.audioByKey.get(key);
-  if (cached) return cached.base64;
+  if (cached) return cached.wav;
 
   const inflight = cache.inflightByKey.get(key);
   if (inflight) return inflight;
 
   const promise = (async () => {
     try {
-      const base64 = await synthesizeWavBase64(text, voice);
-      remember(cache, key, base64);
-      return base64;
+      const wav = await synthesizeWavBuffer(text, voice);
+      remember(cache, key, wav);
+      return wav;
     } finally {
       cache.inflightByKey.delete(key);
     }
@@ -193,19 +297,78 @@ export async function POST(req: Request) {
     );
   }
 
-  const voice = (process.env.TTS_VOICE_NAME || "Kore").trim() || "Kore";
+  const voice = getVoiceName();
 
   try {
-    const [wordAudioBase64, phraseAudioBase64] = await Promise.all([
-      getOrSynthesizeWavBase64(word, voice),
-      getOrSynthesizeWavBase64(phrase, voice),
+    const [wordAudioUrl, phraseAudioUrl] = await Promise.all([
+      getOrCreateBlobUrl({ id: "adhoc", voice, kind: "word", text: word }),
+      getOrCreateBlobUrl({
+        id: "adhoc",
+        voice,
+        kind: "phrase",
+        text: phrase,
+      }),
     ]);
 
-    return NextResponse.json({
+    const res = NextResponse.json({
       mimeType: "audio/wav",
-      wordAudioBase64,
-      phraseAudioBase64,
+      wordAudioUrl,
+      phraseAudioUrl,
     });
+    return withCacheHeaders(res, `${voice}::${word}::${phrase}`);
+  } catch (err) {
+    console.error("/api/tts Gemini TTS error", err);
+    const message = err instanceof Error ? err.message : "TTS failed";
+    return NextResponse.json({ error: message }, { status: 500 });
+  }
+}
+
+export async function GET(req: Request) {
+  const url = new URL(req.url);
+  const id = (url.searchParams.get("id") || "").trim();
+
+  if (!id) {
+    return NextResponse.json(
+      { error: "Missing required query: id" },
+      { status: 400 },
+    );
+  }
+
+  const entry = lookupById(id);
+  if (!entry) {
+    return NextResponse.json(
+      { error: "Unknown flashcard id" },
+      { status: 404 },
+    );
+  }
+
+  const voice = getVoiceName();
+  const etagSeed = `${voice}::${id}::${entry.word}::${entry.phrase}`;
+  const ifNoneMatch = req.headers.get("if-none-match");
+  const etag = makeStrongEtag(etagSeed);
+  if (ifNoneMatch && ifNoneMatch === etag) {
+    return new NextResponse(null, {
+      status: 304,
+      headers: {
+        ETag: etag,
+        "Cache-Control":
+          "public, max-age=604800, s-maxage=604800, stale-while-revalidate=86400",
+      },
+    });
+  }
+
+  try {
+    const [wordAudioUrl, phraseAudioUrl] = await Promise.all([
+      getOrCreateBlobUrl({ id, voice, kind: "word", text: entry.word }),
+      getOrCreateBlobUrl({ id, voice, kind: "phrase", text: entry.phrase }),
+    ]);
+
+    const res = NextResponse.json({
+      mimeType: "audio/wav",
+      wordAudioUrl,
+      phraseAudioUrl,
+    });
+    return withCacheHeaders(res, etagSeed);
   } catch (err) {
     console.error("/api/tts Gemini TTS error", err);
     const message = err instanceof Error ? err.message : "TTS failed";

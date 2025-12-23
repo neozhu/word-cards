@@ -31,6 +31,12 @@ Copy `.env.example` to `.env.local` and set:
 GOOGLE_GENERATIVE_AI_API_KEY=...
 ```
 
+Required (for persistent audio caching on Vercel Blob):
+
+```bash
+BLOB_READ_WRITE_TOKEN=...
+```
+
 Optional:
 
 ```bash
@@ -53,8 +59,8 @@ Flashcard content lives in `content.json` (word + phrase per emoji id). The app 
 
 ## Notes
 
-- TTS responses are cached in memory (no database). Cache survives as long as the server process stays up.
-- The `/api/tts` endpoint returns WAV audio as base64 (word + phrase).
+- TTS audio is cached in Vercel Blob (persistent across deploys/instances).
+- The `/api/tts` endpoint returns audio URLs (word + phrase).
 
 ## AI Disclosure
 
