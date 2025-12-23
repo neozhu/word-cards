@@ -1,0 +1,610 @@
+{
+  "dog": {
+    "word": "Dog",
+    "phrase": "A happy dog wags its tail."
+  },
+  "cat": {
+    "word": "Cat",
+    "phrase": "The cat is soft and quiet."
+  },
+  "lion_face": {
+    "word": "Lion",
+    "phrase": "The lion is strong and brave."
+  },
+  "tiger": {
+    "word": "Tiger",
+    "phrase": "The tiger has orange stripes."
+  },
+  "elephant": {
+    "word": "Elephant",
+    "phrase": "The elephant is very big."
+  },
+  "giraffe_face": {
+    "word": "Giraffe",
+    "phrase": "The giraffe has a long neck."
+  },
+  "monkey_face": {
+    "word": "Monkey",
+    "phrase": "The monkey likes bananas."
+  },
+  "bear": {
+    "word": "Bear",
+    "phrase": "The bear is big and fluffy."
+  },
+  "rabbit": {
+    "word": "Rabbit",
+    "phrase": "The rabbit can hop fast."
+  },
+  "panda_face": {
+    "word": "Panda",
+    "phrase": "The panda eats bamboo."
+  },
+  "monkey": {
+    "word": "Monkey",
+    "phrase": "Can you find the monkey?"
+  },
+  "gorilla": {
+    "word": "Gorilla",
+    "phrase": "Count the gorilla."
+  },
+  "orangutan": {
+    "word": "Orangutan",
+    "phrase": "Here is the orangutan."
+  },
+  "dog2": {
+    "word": "Dog",
+    "phrase": "Let’s point like a dog."
+  },
+  "guide_dog": {
+    "word": "Guide Dog",
+    "phrase": "This guide dog can play."
+  },
+  "service_dog": {
+    "word": "Service Dog",
+    "phrase": "We can walk together!"
+  },
+  "poodle": {
+    "word": "Poodle",
+    "phrase": "Wow! The poodle is here!"
+  },
+  "wolf": {
+    "word": "Wolf",
+    "phrase": "Yay! Hello, wolf!"
+  },
+  "fox_face": {
+    "word": "Fox",
+    "phrase": "Can you find the fox?"
+  },
+  "raccoon": {
+    "word": "Raccoon",
+    "phrase": "Count the raccoon."
+  },
+  "cat2": {
+    "word": "Cat",
+    "phrase": "Here is the cat."
+  },
+  "black_cat": {
+    "word": "Black Cat",
+    "phrase": "Let’s hop like a black cat."
+  },
+  "tiger2": {
+    "word": "Tiger",
+    "phrase": "This tiger can hop."
+  },
+  "leopard": {
+    "word": "Leopard",
+    "phrase": "We can jump together!"
+  },
+  "horse": {
+    "word": "Horse",
+    "phrase": "Wow! The horse is here!"
+  },
+  "moose": {
+    "word": "Moose",
+    "phrase": "Yay! Hello, moose!"
+  },
+  "donkey": {
+    "word": "Donkey",
+    "phrase": "Can you find the donkey?"
+  },
+  "racehorse": {
+    "word": "Horse",
+    "phrase": "Count the horse."
+  },
+  "unicorn_face": {
+    "word": "Unicorn",
+    "phrase": "Here is the unicorn."
+  },
+  "zebra_face": {
+    "word": "Zebra",
+    "phrase": "Let’s smile like a zebra."
+  },
+  "deer": {
+    "word": "Deer",
+    "phrase": "This deer can climb."
+  },
+  "bison": {
+    "word": "Bison",
+    "phrase": "We can clap together!"
+  },
+  "cow": {
+    "word": "Cow",
+    "phrase": "Wow! The cow is here!"
+  },
+  "ox": {
+    "word": "Ox",
+    "phrase": "Yay! Hello, ox!"
+  },
+  "water_buffalo": {
+    "word": "Water Buffalo",
+    "phrase": "Can you find the water buffalo?"
+  },
+  "cow2": {
+    "word": "Cow",
+    "phrase": "Count the cow."
+  },
+  "pig": {
+    "word": "Pig",
+    "phrase": "Here is the pig."
+  },
+  "pig2": {
+    "word": "Pig",
+    "phrase": "Let’s wiggle like a pig."
+  },
+  "boar": {
+    "word": "Boar",
+    "phrase": "This boar can eat."
+  },
+  "pig_nose": {
+    "word": "Pig Nose",
+    "phrase": "We can look together!"
+  },
+  "ram": {
+    "word": "Ram",
+    "phrase": "Wow! The ram is here!"
+  },
+  "sheep": {
+    "word": "Ewe",
+    "phrase": "Yay! Hello, ewe!"
+  },
+  "goat": {
+    "word": "Goat",
+    "phrase": "Can you find the goat?"
+  },
+  "dromedary_camel": {
+    "word": "Camel",
+    "phrase": "Count the camel."
+  },
+  "camel": {
+    "word": "Bactrian Camel",
+    "phrase": "Here is the bactrian camel."
+  },
+  "llama": {
+    "word": "Llama",
+    "phrase": "Let’s listen like a llama."
+  },
+  "mammoth": {
+    "word": "Mammoth",
+    "phrase": "This mammoth can play."
+  },
+  "rhinoceros": {
+    "word": "Rhinoceros",
+    "phrase": "We can hop together!"
+  },
+  "hippopotamus": {
+    "word": "Hippopotamus",
+    "phrase": "Wow! The hippopotamus is here!"
+  },
+  "mouse": {
+    "word": "Mouse",
+    "phrase": "Yay! Hello, mouse!"
+  },
+  "mouse2": {
+    "word": "Mouse",
+    "phrase": "Can you find the mouse?"
+  },
+  "rat": {
+    "word": "Rat",
+    "phrase": "Count the rat."
+  },
+  "hamster": {
+    "word": "Hamster",
+    "phrase": "Here is the hamster."
+  },
+  "rabbit2": {
+    "word": "Rabbit",
+    "phrase": "Let’s walk like a rabbit."
+  },
+  "chipmunk": {
+    "word": "Chipmunk",
+    "phrase": "This chipmunk can sleep."
+  },
+  "beaver": {
+    "word": "Beaver",
+    "phrase": "Wow! The beaver is here!"
+  },
+  "hedgehog": {
+    "word": "Hedgehog",
+    "phrase": "We can run together!"
+  },
+  "bat": {
+    "word": "Bat",
+    "phrase": "Yay! Hello, bat!"
+  },
+  "polar_bear": {
+    "word": "Polar Bear",
+    "phrase": "Can you find the polar bear?"
+  },
+  "koala": {
+    "word": "Koala",
+    "phrase": "Count the koala."
+  },
+  "sloth": {
+    "word": "Sloth",
+    "phrase": "Here is the sloth."
+  },
+  "otter": {
+    "word": "Otter",
+    "phrase": "Let’s walk like a otter."
+  },
+  "skunk": {
+    "word": "Skunk",
+    "phrase": "This skunk can climb."
+  },
+  "kangaroo": {
+    "word": "Kangaroo",
+    "phrase": "We can wiggle together!"
+  },
+  "badger": {
+    "word": "Badger",
+    "phrase": "Wow! The badger is here!"
+  },
+  "feet": {
+    "word": "Paw Prints",
+    "phrase": "Yay! Hello, paw prints!"
+  },
+  "turkey": {
+    "word": "Turkey",
+    "phrase": "Can you find the turkey?"
+  },
+  "chicken": {
+    "word": "Chicken",
+    "phrase": "Count the chicken."
+  },
+  "rooster": {
+    "word": "Rooster",
+    "phrase": "Here is the rooster."
+  },
+  "hatching_chick": {
+    "word": "Hatching Chick",
+    "phrase": "Let’s count like a hatching chick."
+  },
+  "baby_chick": {
+    "word": "Baby Chick",
+    "phrase": "This baby chick can sing."
+  },
+  "hatched_chick": {
+    "word": "Baby Chick",
+    "phrase": "Wow! The baby chick is here!"
+  },
+  "bird": {
+    "word": "Bird",
+    "phrase": "We can dance together!"
+  },
+  "penguin": {
+    "word": "Penguin",
+    "phrase": "Yay! Hello, penguin!"
+  },
+  "dove_of_peace": {
+    "word": "Dove",
+    "phrase": "Can you find the dove?"
+  },
+  "eagle": {
+    "word": "Eagle",
+    "phrase": "Count the eagle."
+  },
+  "duck": {
+    "word": "Duck",
+    "phrase": "Here is the duck."
+  },
+  "swan": {
+    "word": "Swan",
+    "phrase": "Let’s count like a swan."
+  },
+  "owl": {
+    "word": "Owl",
+    "phrase": "This owl can fly."
+  },
+  "dodo": {
+    "word": "Dodo",
+    "phrase": "Wow! The dodo is here!"
+  },
+  "feather": {
+    "word": "Feather",
+    "phrase": "Yay! Hello, feather!"
+  },
+  "flamingo": {
+    "word": "Flamingo",
+    "phrase": "We can count together!"
+  },
+  "peacock": {
+    "word": "Peacock",
+    "phrase": "Can you find the peacock?"
+  },
+  "parrot": {
+    "word": "Parrot",
+    "phrase": "Count the parrot."
+  },
+  "wing": {
+    "word": "Wing",
+    "phrase": "Here is the wing."
+  },
+  "black_bird": {
+    "word": "Black Bird",
+    "phrase": "Let’s dance like a black bird."
+  },
+  "goose": {
+    "word": "Goose",
+    "phrase": "This goose can play."
+  },
+  "frog": {
+    "word": "Frog",
+    "phrase": "Wow! The frog is here!"
+  },
+  "crocodile": {
+    "word": "Crocodile",
+    "phrase": "Yay! Hello, crocodile!"
+  },
+  "turtle": {
+    "word": "Turtle",
+    "phrase": "Can you find the turtle?"
+  },
+  "lizard": {
+    "word": "Lizard",
+    "phrase": "Count the lizard."
+  },
+  "snake": {
+    "word": "Snake",
+    "phrase": "Here is the snake."
+  },
+  "dragon_face": {
+    "word": "Dragon",
+    "phrase": "We can listen together!"
+  },
+  "dragon": {
+    "word": "Dragon",
+    "phrase": "Let’s listen like a dragon."
+  },
+  "sauropod": {
+    "word": "Sauropod",
+    "phrase": "This sauropod can play."
+  },
+  "t-rex": {
+    "word": "T-Rex",
+    "phrase": "We can smile together!"
+  },
+  "whale": {
+    "word": "Spouting Whale",
+    "phrase": "Wow! The spouting whale is here!"
+  },
+  "whale2": {
+    "word": "Whale",
+    "phrase": "Yay! Hello, whale!"
+  },
+  "dolphin": {
+    "word": "Dolphin",
+    "phrase": "Can you find the dolphin?"
+  },
+  "seal": {
+    "word": "Seal",
+    "phrase": "Count the seal."
+  },
+  "fish": {
+    "word": "Fish",
+    "phrase": "Here is the fish."
+  },
+  "tropical_fish": {
+    "word": "Tropical Fish",
+    "phrase": "Let’s clap like a tropical fish."
+  },
+  "blowfish": {
+    "word": "Blowfish",
+    "phrase": "This blowfish can swim."
+  },
+  "shark": {
+    "word": "Shark",
+    "phrase": "Wow! The shark is here!"
+  },
+  "octopus": {
+    "word": "Octopus",
+    "phrase": "Yay! Hello, octopus!"
+  },
+  "shell": {
+    "word": "Spiral Shell",
+    "phrase": "We can point together!"
+  },
+  "coral": {
+    "word": "Coral",
+    "phrase": "Can you find the coral?"
+  },
+  "jellyfish": {
+    "word": "Jellyfish",
+    "phrase": "Count the jellyfish."
+  },
+  "snail": {
+    "word": "Snail",
+    "phrase": "Here is the snail."
+  },
+  "butterfly": {
+    "word": "Butterfly",
+    "phrase": "Let’s run like a butterfly."
+  },
+  "bug": {
+    "word": "Bug",
+    "phrase": "This bug can buzz."
+  },
+  "ant": {
+    "word": "Ant",
+    "phrase": "Wow! The ant is here!"
+  },
+  "bee": {
+    "word": "Honeybee",
+    "phrase": "Yay! Hello, honeybee!"
+  },
+  "beetle": {
+    "word": "Beetle",
+    "phrase": "Can you find the beetle?"
+  },
+  "ladybug": {
+    "word": "Lady Beetle",
+    "phrase": "Count the lady beetle."
+  },
+  "cricket": {
+    "word": "Cricket",
+    "phrase": "Here is the cricket."
+  },
+  "cockroach": {
+    "word": "Cockroach",
+    "phrase": "Let’s listen like a cockroach."
+  },
+  "spider": {
+    "word": "Spider",
+    "phrase": "This spider can buzz."
+  },
+  "spider_web": {
+    "word": "Spider Web",
+    "phrase": "Wow! The spider web is here!"
+  },
+  "scorpion": {
+    "word": "Scorpion",
+    "phrase": "Yay! Hello, scorpion!"
+  },
+  "mosquito": {
+    "word": "Mosquito",
+    "phrase": "Can you find the mosquito?"
+  },
+  "fly": {
+    "word": "Fly",
+    "phrase": "Count the fly."
+  },
+  "worm": {
+    "word": "Worm",
+    "phrase": "Here is the worm."
+  },
+  "microbe": {
+    "word": "Microbe",
+    "phrase": "Let’s dance like a microbe."
+  },
+  "bouquet": {
+    "word": "Bouquet",
+    "phrase": "This bouquet can bloom."
+  },
+  "cherry_blossom": {
+    "word": "Cherry Blossom",
+    "phrase": "Wow! The cherry blossom is here!"
+  },
+  "white_flower": {
+    "word": "White Flower",
+    "phrase": "Yay! Hello, white flower!"
+  },
+  "lotus": {
+    "word": "Lotus",
+    "phrase": "Can you find the lotus?"
+  },
+  "rosette": {
+    "word": "Rosette",
+    "phrase": "Count the rosette."
+  },
+  "rose": {
+    "word": "Rose",
+    "phrase": "Here is the rose."
+  },
+  "wilted_flower": {
+    "word": "Wilted Flower",
+    "phrase": "Let’s jump like a wilted flower."
+  },
+  "hibiscus": {
+    "word": "Hibiscus",
+    "phrase": "This hibiscus can eat."
+  },
+  "sunflower": {
+    "word": "Sunflower",
+    "phrase": "Wow! The sunflower is here!"
+  },
+  "blossom": {
+    "word": "Blossom",
+    "phrase": "Yay! Hello, blossom!"
+  },
+  "tulip": {
+    "word": "Tulip",
+    "phrase": "Can you find the tulip?"
+  },
+  "hyacinth": {
+    "word": "Hyacinth",
+    "phrase": "Count the hyacinth."
+  },
+  "seedling": {
+    "word": "Seedling",
+    "phrase": "Here is the seedling."
+  },
+  "potted_plant": {
+    "word": "Potted Plant",
+    "phrase": "Let’s look like a potted plant."
+  },
+  "evergreen_tree": {
+    "word": "Evergreen Tree",
+    "phrase": "This evergreen tree can grow."
+  },
+  "deciduous_tree": {
+    "word": "Deciduous Tree",
+    "phrase": "Wow! The deciduous tree is here!"
+  },
+  "palm_tree": {
+    "word": "Palm Tree",
+    "phrase": "Yay! Hello, palm tree!"
+  },
+  "cactus": {
+    "word": "Cactus",
+    "phrase": "Can you find the cactus?"
+  },
+  "ear_of_rice": {
+    "word": "Ear Of Rice",
+    "phrase": "Count the ear of rice."
+  },
+  "herb": {
+    "word": "Herb",
+    "phrase": "Here is the herb."
+  },
+  "shamrock": {
+    "word": "Shamrock",
+    "phrase": "The shamrock can rest."
+  },
+  "four_leaf_clover": {
+    "word": "Four Leaf Clover",
+    "phrase": "The four leaf clover can bloom."
+  },
+  "maple_leaf": {
+    "word": "Maple Leaf",
+    "phrase": "The maple leaf can grow."
+  },
+  "fallen_leaf": {
+    "word": "Fallen Leaf",
+    "phrase": "The fallen leaf can grow."
+  },
+  "leaves": {
+    "word": "Leaf Fluttering In Wind",
+    "phrase": "The leaf fluttering in wind can grow."
+  },
+  "empty_nest": {
+    "word": "Empty Nest",
+    "phrase": "The empty nest can climb."
+  },
+  "nest_with_eggs": {
+    "word": "Nest With Eggs",
+    "phrase": "The nest with eggs can eat."
+  },
+  "mushroom": {
+    "word": "Mushroom",
+    "phrase": "The mushroom can grow."
+  }
+}

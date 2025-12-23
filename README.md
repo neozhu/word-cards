@@ -1,6 +1,12 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+`word-cards` is a warm, minimalist English flashcards web app for kids (3–6).
 
 ## Getting Started
+
+### 1) Configure TTS (optional but recommended)
+
+Copy `.env.example` to `.env.local` and provide Google credentials.
+
+### 2) Run dev server
 
 First, run the development server:
 

@@ -1,8 +1,21 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Warm & soft palette */
+  --page-bg: #f3efea;
+  --app-bg: #fff9f2;
+  --card-bg: #ffffff;
+  --text: #4a4a4a;
+  --accent: #ff9d6c;
+
+  /* UI primitives */
+  --card-shadow: 0 20px 50px rgba(0, 0, 0, 0.05);
+  --progress-track: rgba(74, 74, 74, 0.12);
+  --progress-fill: var(--accent);
+
+  /* Keep legacy tokens mapped for Tailwind theme usage */
+  --background: var(--app-bg);
+  --foreground: var(--text);
 }
 
 @theme inline {
@@ -12,15 +25,8 @@
   --font-mono: var(--font-geist-mono);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--page-bg);
+  color: var(--text);
+  font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
 }
