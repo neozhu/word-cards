@@ -96,6 +96,27 @@ function createWavHeader(
   return buffer;
 }
 
+function extractInlineAudioBase64(response: unknown): string | null {
+  // The SDK response shape can vary; search defensively.
+  const r = response as {
+    candidates?: Array<{
+      content?: {
+        parts?: Array<{
+          inlineData?: { data?: string };
+        }>;
+      };
+    }>;
+  };
+
+  for (const candidate of r.candidates ?? []) {
+    for (const part of candidate.content?.parts ?? []) {
+      const data = part.inlineData?.data;
+      if (typeof data === "string" && data.length > 0) return data;
+    }
+  }
+  return null;
+}
+
 async function synthesizeWavBase64(text: string, voice: string) {
   const apiKey = getGeminiApiKey();
   if (!apiKey) {
@@ -117,11 +138,10 @@ async function synthesizeWavBase64(text: string, voice: string) {
     },
   });
 
-  const audioData =
-    response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+  const audioData = extractInlineAudioBase64(response);
 
   if (!audioData) {
-    throw new Error("No audio data generated");
+    throw new Error("No audio data generated (no inlineData.data found)");
   }
 
   const pcmBuffer = Buffer.from(audioData, "base64");
@@ -187,6 +207,7 @@ export async function POST(req: Request) {
       phraseAudioBase64,
     });
   } catch (err) {
+    console.error("/api/tts Gemini TTS error", err);
     const message = err instanceof Error ? err.message : "TTS failed";
     return NextResponse.json({ error: message }, { status: 500 });
   }

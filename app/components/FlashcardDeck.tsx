@@ -32,6 +32,7 @@ export default function FlashcardDeck({ cards }: Props) {
   const [direction, setDirection] = useState<1 | -1>(1);
 
   const isPlayingRef = useRef(false);
+  const didDragRef = useRef(false);
 
   const count = cards.length;
   const card = cards[index];
@@ -54,6 +55,12 @@ export default function FlashcardDeck({ cards }: Props) {
       });
 
       if (!res.ok) {
+        try {
+          const errorPayload = (await res.json()) as { error?: string };
+          console.warn("/api/tts failed", res.status, errorPayload?.error);
+        } catch {
+          console.warn("/api/tts failed", res.status);
+        }
         return;
       }
 
@@ -126,11 +133,23 @@ export default function FlashcardDeck({ cards }: Props) {
             drag="x"
             dragConstraints={{ left: 0, right: 0 }}
             dragElastic={0.2}
+            onDragStart={() => {
+              didDragRef.current = true;
+            }}
             onDragEnd={(_, info) => {
               if (info.offset.x > 100) paginate(-1);
               if (info.offset.x < -100) paginate(1);
+
+              // If the pointer interaction was a drag, don't treat it as a tap.
+              // Reset on the next tick so an immediate click doesn't accidentally play.
+              setTimeout(() => {
+                didDragRef.current = false;
+              }, 0);
             }}
-            onTap={playCurrent}
+            onTap={() => {
+              if (didDragRef.current) return;
+              void playCurrent();
+            }}
             whileTap={{ scale: 0.95 }}
             className="relative z-10 rounded-[40px] bg-(--card-bg) px-7 py-8 text-center shadow-(--card-shadow) sm:px-8 sm:py-10"
           >
