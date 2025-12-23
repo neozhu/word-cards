@@ -1,42 +1,61 @@
-`word-cards` is a warm, minimalist English flashcards web app for kids (3–6).
+# word-cards
+
+Warm, minimalist English flashcards for kids (3–6) designed for quick daily practice.
+Each card pairs a clear word with a short, kid-friendly example phrase and optional text-to-speech audio.
+Swipe through the deck like real cards—simple UI, big type, and low distraction.
+
+![word-cards screenshot](public/word-cards.png)
+
+Swipe left/right to move through cards. Tap the card (or the speaker button) to hear the word first, then a short example phrase.
+
+## Tech
+
+- Next.js (App Router) + React + TypeScript
+- Tailwind CSS v4
+- Framer Motion (swipe interactions)
+- Gemini TTS via `@google/genai` (server route)
 
 ## Getting Started
 
-### 1) Configure TTS (optional but recommended)
-
-Copy `.env.example` to `.env.local` and provide Google credentials.
-
-### 2) Run dev server
-
-First, run the development server:
+### 1) Install
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+pnpm install
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+### 2) Configure TTS
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Copy `.env.example` to `.env.local` and set:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```bash
+GOOGLE_GENERATIVE_AI_API_KEY=...
+```
 
-## Learn More
+Optional:
 
-To learn more about Next.js, take a look at the following resources:
+```bash
+TTS_VOICE_NAME=Kore
+```
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+If the API key is missing, the app still runs but audio playback will fail.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### 3) Run
 
-## Deploy on Vercel
+```bash
+pnpm dev
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Open http://localhost:3000
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Content
+
+Flashcard content lives in `content.json` (word + phrase per emoji id). The app builds the deck from that file.
+
+## Notes
+
+- TTS responses are cached in memory (no database). Cache survives as long as the server process stays up.
+- The `/api/tts` endpoint returns WAV audio as base64 (word + phrase).
+
+## AI Disclosure
+
+Some of the flashcard content (especially example phrases) may be AI-generated. Please review and edit `content.json` as needed.
