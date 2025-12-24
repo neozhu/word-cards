@@ -1,4 +1,3 @@
-import { GoogleGenAI } from "@google/genai";
 import { NextResponse } from "next/server";
 import content from "@/content.json";
 import { createHash } from "node:crypto";
@@ -8,7 +7,9 @@ export const runtime = "nodejs";
 
 export const maxDuration = 30;
 
-const TTS_MODEL = "gemini-2.5-flash-preview-tts";
+// Used as part of the persistent cache key (Vercel Blob pathname hash).
+// Change this when switching engines/settings to avoid collisions.
+const TTS_MODEL = "piper-http-v1";
 const BLOB_CACHE_MAX_AGE_SECONDS = 60 * 60 * 24 * 365;
 
 type TtsCacheEntry = {
@@ -145,7 +146,12 @@ function withCacheHeaders(res: NextResponse, etagSeed: string) {
 }
 
 function getVoiceName(): string {
-  return (process.env.TTS_VOICE_NAME || "Kore").trim() || "Kore";
+  const voice = (
+    process.env.PIPER_TTS_VOICE_NAME ||
+    process.env.TTS_VOICE_NAME ||
+    "en_US-lessac-high"
+  ).trim();
+  return voice || "en_US-lessac-high";
 }
 
 function lookupById(id: string): { word: string; phrase: string } | null {
@@ -157,102 +163,84 @@ function lookupById(id: string): { word: string; phrase: string } | null {
   return { word, phrase };
 }
 
-function getGeminiApiKey(): string | null {
-  const key = process.env.GOOGLE_GENERATIVE_AI_API_KEY;
-  return key && key.trim().length > 0 ? key.trim() : null;
-}
-
-function createWavHeader(
-  dataLength: number,
-  sampleRate = 24000,
-  numChannels = 1,
-  bitsPerSample = 16,
-) {
-  const buffer = Buffer.alloc(44);
-  let offset = 0;
-
-  buffer.write("RIFF", offset);
-  offset += 4;
-  buffer.writeUInt32LE(36 + dataLength, offset);
-  offset += 4;
-  buffer.write("WAVE", offset);
-  offset += 4;
-
-  buffer.write("fmt ", offset);
-  offset += 4;
-  buffer.writeUInt32LE(16, offset);
-  offset += 4;
-  buffer.writeUInt16LE(1, offset);
-  offset += 2;
-  buffer.writeUInt16LE(numChannels, offset);
-  offset += 2;
-  buffer.writeUInt32LE(sampleRate, offset);
-  offset += 4;
-  buffer.writeUInt32LE((sampleRate * numChannels * bitsPerSample) / 8, offset);
-  offset += 4;
-  buffer.writeUInt16LE((numChannels * bitsPerSample) / 8, offset);
-  offset += 2;
-  buffer.writeUInt16LE(bitsPerSample, offset);
-  offset += 2;
-
-  buffer.write("data", offset);
-  offset += 4;
-  buffer.writeUInt32LE(dataLength, offset);
-
-  return buffer;
-}
-
-function extractInlineAudioBase64(response: unknown): string | null {
-  // The SDK response shape can vary; search defensively.
-  const r = response as {
-    candidates?: Array<{
-      content?: {
-        parts?: Array<{
-          inlineData?: { data?: string };
-        }>;
-      };
-    }>;
-  };
-
-  for (const candidate of r.candidates ?? []) {
-    for (const part of candidate.content?.parts ?? []) {
-      const data = part.inlineData?.data;
-      if (typeof data === "string" && data.length > 0) return data;
-    }
+function getPiperTtsUrl(): string {
+  const url = (process.env.PIPER_TTS_URL || "https://tts.blazorserver.com/v1/audio/speech").trim();
+  if (!url) {
+    throw new Error("Missing PIPER_TTS_URL environment variable");
   }
-  return null;
+  try {
+    // Validate absolute URL.
+    const parsed = new URL(url);
+    void parsed;
+  } catch {
+    throw new Error("Invalid PIPER_TTS_URL (must be an absolute URL)");
+  }
+  return url;
+}
+
+function getPiperModelName(): string {
+  return (process.env.PIPER_TTS_MODEL || "piper").trim() || "piper";
+}
+
+function looksLikeWav(buffer: Buffer): boolean {
+  if (buffer.length < 12) return false;
+  return (
+    buffer.toString("ascii", 0, 4) === "RIFF" &&
+    buffer.toString("ascii", 8, 12) === "WAVE"
+  );
 }
 
 async function synthesizeWavBuffer(text: string, voice: string) {
-  const apiKey = getGeminiApiKey();
-  if (!apiKey) {
-    throw new Error("Missing GOOGLE_GENERATIVE_AI_API_KEY environment variable");
-  }
+  const endpoint = getPiperTtsUrl();
+  const model = getPiperModelName();
 
-  const ai = new GoogleGenAI({ apiKey });
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 25_000);
 
-  const response = await ai.models.generateContent({
-    model: TTS_MODEL,
-    contents: [{ parts: [{ text }] }],
-    config: {
-      responseModalities: ["AUDIO"],
-      speechConfig: {
-        voiceConfig: {
-          prebuiltVoiceConfig: { voiceName: voice },
-        },
+  let res: Response;
+  try {
+    res = await fetch(endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
       },
-    },
-  });
-
-  const audioData = extractInlineAudioBase64(response);
-
-  if (!audioData) {
-    throw new Error("No audio data generated (no inlineData.data found)");
+      body: JSON.stringify({ model, voice, input: text }),
+      signal: controller.signal,
+      // This is a server-side request; don't cache here.
+      cache: "no-store",
+    });
+  } finally {
+    clearTimeout(timeout);
   }
 
-  const pcmBuffer = Buffer.from(audioData, "base64");
-  const wavHeader = createWavHeader(pcmBuffer.length);
-  return Buffer.concat([wavHeader, pcmBuffer]);
+  if (!res.ok) {
+    const contentType = res.headers.get("content-type") || "";
+    let detail = "";
+    try {
+      if (contentType.includes("application/json")) {
+        const json = (await res.json()) as { error?: unknown; message?: unknown };
+        detail =
+          typeof json.error === "string"
+            ? json.error
+            : typeof json.message === "string"
+              ? json.message
+              : "";
+      } else {
+        detail = (await res.text()).slice(0, 300);
+      }
+    } catch {
+      // Ignore parse errors.
+    }
+    throw new Error(
+      `Piper TTS error (${res.status}): ${detail || res.statusText || "Request failed"}`,
+    );
+  }
+
+  const wav = Buffer.from(await res.arrayBuffer());
+  if (!looksLikeWav(wav)) {
+    throw new Error("Unexpected TTS response (expected WAV audio)");
+  }
+  return wav;
 }
 
 async function getOrSynthesizeWavBuffer(text: string, voice: string) {
@@ -317,7 +305,7 @@ export async function POST(req: Request) {
     });
     return withCacheHeaders(res, `${voice}::${word}::${phrase}`);
   } catch (err) {
-    console.error("/api/tts Gemini TTS error", err);
+    console.error("/api/tts Piper TTS error", err);
     const message = err instanceof Error ? err.message : "TTS failed";
     return NextResponse.json({ error: message }, { status: 500 });
   }
@@ -370,7 +358,7 @@ export async function GET(req: Request) {
     });
     return withCacheHeaders(res, etagSeed);
   } catch (err) {
-    console.error("/api/tts Gemini TTS error", err);
+    console.error("/api/tts Piper TTS error", err);
     const message = err instanceof Error ? err.message : "TTS failed";
     return NextResponse.json({ error: message }, { status: 500 });
   }

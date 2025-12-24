@@ -13,7 +13,7 @@ Swipe left/right to move through cards. Tap the card (or the speaker button) to 
 - Next.js (App Router) + React + TypeScript
 - Tailwind CSS v4
 - Framer Motion (swipe interactions)
-- Gemini TTS via `@google/genai` (server route)
+- Piper HTTP TTS (server route)
 
 ## Getting Started
 
@@ -28,7 +28,7 @@ pnpm install
 Copy `.env.example` to `.env.local` and set:
 
 ```bash
-GOOGLE_GENERATIVE_AI_API_KEY=...
+PIPER_TTS_URL=https://tts.blazorserver.com/v1/audio/speech
 ```
 
 Required (for persistent audio caching on Vercel Blob):
@@ -40,10 +40,10 @@ BLOB_READ_WRITE_TOKEN=...
 Optional:
 
 ```bash
-TTS_VOICE_NAME=Kore
+PIPER_TTS_VOICE_NAME=en_US-lessac-high
 ```
 
-If the API key is missing, the app still runs but audio playback will fail.
+If the TTS URL is missing/invalid, the app still runs but audio playback will fail.
 
 ### 3) Run
 
