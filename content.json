@@ -606,5 +606,497 @@
   "mushroom": {
     "word": "Mushroom",
     "phrase": "Popping up after the rain."
+  },
+  "amphora": {
+    "word": "Amphora",
+    "phrase": "This amphora is an ancient jar from long ago."
+  },
+  "apple": {
+    "word": "Red Apple",
+    "phrase": "Crunch! The red apple goes snap-snap in my mouth."
+  },
+  "avocado": {
+    "word": "Avocado",
+    "phrase": "Squish! The avocado is soft like a little green pillow."
+  },
+  "baby_bottle": {
+    "word": "Baby Bottle",
+    "phrase": "Shake, shake—the baby bottle is ready for milk."
+  },
+  "bacon": {
+    "word": "Bacon",
+    "phrase": "Sizzle, sizzle! Bacon is cooking in the pan."
+  },
+  "bagel": {
+    "word": "Bagel",
+    "phrase": "The bagel is a doughnut’s bread cousin."
+  },
+  "baguette_bread": {
+    "word": "Baguette Bread",
+    "phrase": "The baguette is long like a crunchy bread wand."
+  },
+  "banana": {
+    "word": "Banana",
+    "phrase": "Peel it like a zipper—hello, banana!"
+  },
+  "beans": {
+    "word": "Beans",
+    "phrase": "Tiny beans roll and rattle in the bowl."
+  },
+  "bell_pepper": {
+    "word": "Bell Pepper",
+    "phrase": "The bell pepper is a crunchy rainbow bite."
+  },
+  "bento": {
+    "word": "Bento Box",
+    "phrase": "Open the bento box—surprise snacks inside!"
+  },
+  "beverage_box": {
+    "word": "Beverage Box",
+    "phrase": "Poke the straw—sip, sip from the beverage box."
+  },
+  "birthday": {
+    "word": "Birthday Cake",
+    "phrase": "Make a wish—blow the candles on the birthday cake!"
+  },
+  "blueberries": {
+    "word": "Blueberries",
+    "phrase": "Blueberries are tiny blue marbles you can eat."
+  },
+  "bowl_with_spoon": {
+    "word": "Bowl With Spoon",
+    "phrase": "Scoop, scoop—the spoon dives into the bowl."
+  },
+  "bread": {
+    "word": "Bread",
+    "phrase": "Warm bread smells like a cozy hug."
+  },
+  "broccoli": {
+    "word": "Broccoli",
+    "phrase": "Broccoli looks like a little green tree forest."
+  },
+  "bubble_tea": {
+    "word": "Bubble Tea",
+    "phrase": "Pop! The bubbles in bubble tea go boing-boing."
+  },
+  "burrito": {
+    "word": "Burrito",
+    "phrase": "The burrito is a yummy blanket wrapped around food."
+  },
+  "butter": {
+    "word": "Butter",
+    "phrase": "Butter slides and melts like sunny gold."
+  },
+  "cake": {
+    "word": "Shortcake",
+    "phrase": "Shortcake is fluffy like a sweet little cloud."
+  },
+  "candy": {
+    "word": "Candy",
+    "phrase": "Candy sparkles with colors—just one, please!"
+  },
+  "canned_food": {
+    "word": "Canned Food",
+    "phrase": "Twist and pop—the can opens with a surprise inside."
+  },
+  "carrot": {
+    "word": "Carrot",
+    "phrase": "Crunch! The carrot sounds like a tiny drum."
+  },
+  "cheese_wedge": {
+    "word": "Cheese Wedge",
+    "phrase": "The cheese wedge is a tasty triangle."
+  },
+  "cherries": {
+    "word": "Cherries",
+    "phrase": "Two cherries can look like red earrings."
+  },
+  "chestnut": {
+    "word": "Chestnut",
+    "phrase": "A chestnut is a little treasure in a hard coat."
+  },
+  "chocolate_bar": {
+    "word": "Chocolate Bar",
+    "phrase": "Snap! The chocolate bar breaks into neat squares."
+  },
+  "chopsticks": {
+    "word": "Chopsticks",
+    "phrase": "Click-click! Chopsticks are food pick-up sticks."
+  },
+  "coconut": {
+    "word": "Coconut",
+    "phrase": "Knock-knock—coconut has a tough shell outside."
+  },
+  "coffee": {
+    "word": "Hot Beverage",
+    "phrase": "Careful—this hot drink is warm like morning sun."
+  },
+  "cookie": {
+    "word": "Cookie",
+    "phrase": "The cookie is a sweet little coin you can munch."
+  },
+  "corn": {
+    "word": "Ear Of Corn",
+    "phrase": "Corn has rows of golden teeth—chomp, chomp!"
+  },
+  "crab": {
+    "word": "Crab",
+    "phrase": "The crab walks sideways like it’s dancing."
+  },
+  "croissant": {
+    "word": "Croissant",
+    "phrase": "The croissant is a flaky moon-shaped snack."
+  },
+  "cucumber": {
+    "word": "Cucumber",
+    "phrase": "Cucumber is cool and crunchy like fresh rain."
+  },
+  "cup_with_straw": {
+    "word": "Cup With Straw",
+    "phrase": "Slurp! The straw is a tiny drink tunnel."
+  },
+  "cupcake": {
+    "word": "Cupcake",
+    "phrase": "The cupcake wears a swirly frosting hat."
+  },
+  "curry": {
+    "word": "Curry Rice",
+    "phrase": "Curry rice smells spicy and happy."
+  },
+  "custard": {
+    "word": "Custard",
+    "phrase": "Custard is smooth like a sleepy pudding."
+  },
+  "cut_of_meat": {
+    "word": "Cut Of Meat",
+    "phrase": "This cut of meat is ready to cook for dinner."
+  },
+  "dango": {
+    "word": "Dango",
+    "phrase": "Dango is a sweet snack on a little stick."
+  },
+  "doughnut": {
+    "word": "Doughnut",
+    "phrase": "The doughnut has a hole—peek through it!"
+  },
+  "dumpling": {
+    "word": "Dumpling",
+    "phrase": "A dumpling is a soft pocket with a secret filling."
+  },
+  "egg": {
+    "word": "Egg",
+    "phrase": "Tap-tap—an egg can hide a golden yolk."
+  },
+  "eggplant": {
+    "word": "Eggplant",
+    "phrase": "Eggplant shines purple like a royal balloon."
+  },
+  "falafel": {
+    "word": "Falafel",
+    "phrase": "Falafel is a little crunchy ball made from beans."
+  },
+  "fish_cake": {
+    "word": "Fish Cake With Swirl",
+    "phrase": "Look! The fish cake has a candy-like swirl."
+  },
+  "flatbread": {
+    "word": "Flatbread",
+    "phrase": "Flatbread is a soft food blanket for dips."
+  },
+  "fondue": {
+    "word": "Fondue",
+    "phrase": "Dip and swirl—fondue is a sharing pot of fun."
+  },
+  "fork_and_knife": {
+    "word": "Fork And Knife",
+    "phrase": "The fork pokes and the knife cuts—teamwork!"
+  },
+  "fortune_cookie": {
+    "word": "Fortune Cookie",
+    "phrase": "Crack it open—your fortune cookie has a tiny note."
+  },
+  "fried_egg": {
+    "word": "Cooking",
+    "phrase": "The egg is frying—listen to the gentle sizzle."
+  },
+  "fried_shrimp": {
+    "word": "Fried Shrimp",
+    "phrase": "Fried shrimp is crunchy—crisp, crisp!"
+  },
+  "fries": {
+    "word": "French Fries",
+    "phrase": "French fries are salty sticks that go crunch!"
+  },
+  "garlic": {
+    "word": "Garlic",
+    "phrase": "Garlic smells strong—like a superhero food."
+  },
+  "glass_of_milk": {
+    "word": "Glass Of Milk",
+    "phrase": "A glass of milk looks like a white mini-cloud."
+  },
+  "grapes": {
+    "word": "Grapes",
+    "phrase": "Grapes come in a bunch like tiny balloons."
+  },
+  "green_apple": {
+    "word": "Green Apple",
+    "phrase": "The green apple is tart—zing on your tongue!"
+  },
+  "green_salad": {
+    "word": "Green Salad",
+    "phrase": "Green salad is a crunchy garden in a bowl."
+  },
+  "hamburger": {
+    "word": "Hamburger",
+    "phrase": "The hamburger is a tall stack—bun, patty, yum!"
+  },
+  "hocho": {
+    "word": "Hocho",
+    "phrase": "A hocho is a sharp knife—hands stay safe!"
+  },
+  "honey_pot": {
+    "word": "Honey Pot",
+    "phrase": "The honey pot holds golden, sticky sweetness."
+  },
+  "hot_pepper": {
+    "word": "Hot Pepper",
+    "phrase": "Hot pepper is spicy—fire on your tongue!"
+  },
+  "hotdog": {
+    "word": "Hot Dog",
+    "phrase": "The hot dog rides in a bun like a cozy bed."
+  },
+  "ice_cream": {
+    "word": "Ice Cream",
+    "phrase": "Ice cream is cold and sweet—brrr, yum!"
+  },
+  "ice_cube": {
+    "word": "Ice",
+    "phrase": "An ice cube is a tiny cold block—brrr!"
+  },
+  "icecream": {
+    "word": "Soft Ice Cream",
+    "phrase": "Soft ice cream swirls like a snowy ribbon."
+  },
+  "jar": {
+    "word": "Jar",
+    "phrase": "Twist the lid—the jar keeps things safe inside."
+  },
+  "kiwifruit": {
+    "word": "Kiwifruit",
+    "phrase": "Kiwifruit is fuzzy outside and green inside."
+  },
+  "knife_fork_plate": {
+    "word": "Fork And Knife With Plate",
+    "phrase": "The plate is set—dinner time is coming!"
+  },
+  "leafy_green": {
+    "word": "Leafy Green",
+    "phrase": "Leafy greens are like crunchy green fans."
+  },
+  "lemon": {
+    "word": "Lemon",
+    "phrase": "Lemon is sour—make a funny face!"
+  },
+  "lobster": {
+    "word": "Lobster",
+    "phrase": "The lobster has big claws like pinchers."
+  },
+  "lollipop": {
+    "word": "Lollipop",
+    "phrase": "The lollipop is a sweet circle on a stick."
+  },
+  "mango": {
+    "word": "Mango",
+    "phrase": "Mango is juicy and smells like summer."
+  },
+  "mate_drink": {
+    "word": "Mate",
+    "phrase": "Mate is a special tea-like drink."
+  },
+  "meat_on_bone": {
+    "word": "Meat On Bone",
+    "phrase": "This meat is still on the bone—like a handle."
+  },
+  "melon": {
+    "word": "Melon",
+    "phrase": "The melon is juicy—drip, drip!"
+  },
+  "moon_cake": {
+    "word": "Moon Cake",
+    "phrase": "Moon cake is a festival treat shaped like the moon."
+  },
+  "oden": {
+    "word": "Oden",
+    "phrase": "Oden is warm soup food for chilly days."
+  },
+  "olive": {
+    "word": "Olive",
+    "phrase": "An olive is a tiny salty snack."
+  },
+  "onion": {
+    "word": "Onion",
+    "phrase": "Onion can make your eyes water—blink, blink!"
+  },
+  "oyster": {
+    "word": "Oyster",
+    "phrase": "An oyster is a sea shell that can hide a pearl."
+  },
+  "pancakes": {
+    "word": "Pancakes",
+    "phrase": "Pancakes stack up like soft breakfast pillows."
+  },
+  "pea_pod": {
+    "word": "Pea Pod",
+    "phrase": "Pop! Peas hide inside the pod."
+  },
+  "peach": {
+    "word": "Peach",
+    "phrase": "The peach feels fuzzy like a tiny teddy."
+  },
+  "peanuts": {
+    "word": "Peanuts",
+    "phrase": "Peanuts wear a bumpy shell jacket."
+  },
+  "pear": {
+    "word": "Pear",
+    "phrase": "A pear is sweet and shaped like a teardrop."
+  },
+  "pie": {
+    "word": "Pie",
+    "phrase": "Pie has a crust hat and a yummy filling."
+  },
+  "pineapple": {
+    "word": "Pineapple",
+    "phrase": "Pineapple is spiky outside and sweet inside."
+  },
+  "pizza": {
+    "word": "Pizza",
+    "phrase": "Pizza is a cheesy circle cut into triangles."
+  },
+  "popcorn": {
+    "word": "Popcorn",
+    "phrase": "Popcorn jumps—pop, pop, pop!"
+  },
+  "potato": {
+    "word": "Potato",
+    "phrase": "A potato is a simple brown treasure from the ground."
+  },
+  "poultry_leg": {
+    "word": "Poultry Leg",
+    "phrase": "The poultry leg is a big drumstick—tap-tap!"
+  },
+  "pouring_liquid": {
+    "word": "Pouring Liquid",
+    "phrase": "The liquid goes whoosh as it pours."
+  },
+  "pretzel": {
+    "word": "Pretzel",
+    "phrase": "A pretzel is twisty like a knot."
+  },
+  "ramen": {
+    "word": "Steaming Bowl",
+    "phrase": "Steamy noodles make the bowl go fog-fog."
+  },
+  "rice": {
+    "word": "Cooked Rice",
+    "phrase": "Cooked rice is soft—like little white pebbles."
+  },
+  "rice_ball": {
+    "word": "Rice Ball",
+    "phrase": "A rice ball is a hand-shaped snack—squeeze and done!"
+  },
+  "rice_cracker": {
+    "word": "Rice Cracker",
+    "phrase": "Rice crackers crunch loud—crack, crack!"
+  },
+  "salt": {
+    "word": "Salt",
+    "phrase": "Just a pinch of salt makes food sparkle."
+  },
+  "sandwich": {
+    "word": "Sandwich",
+    "phrase": "A sandwich is a food hug—bread on both sides."
+  },
+  "shallow_pan_of_food": {
+    "word": "Shallow Pan Of Food",
+    "phrase": "Food is sizzling in the shallow pan—shh, sizzle!"
+  },
+  "shaved_ice": {
+    "word": "Shaved Ice",
+    "phrase": "Shaved ice is snowy and sweet—brrr!"
+  },
+  "shrimp": {
+    "word": "Shrimp",
+    "phrase": "A shrimp curls up like a tiny comma."
+  },
+  "spaghetti": {
+    "word": "Spaghetti",
+    "phrase": "Spaghetti noodles wiggle like silly strings."
+  },
+  "spoon": {
+    "word": "Spoon",
+    "phrase": "The spoon scoops like a little shovel."
+  },
+  "squid": {
+    "word": "Squid",
+    "phrase": "The squid has arms that wave hello."
+  },
+  "stew": {
+    "word": "Pot Of Food",
+    "phrase": "The pot of stew is bubbling—blub, blub!"
+  },
+  "strawberry": {
+    "word": "Strawberry",
+    "phrase": "A strawberry is red with tiny dotted seeds."
+  },
+  "stuffed_flatbread": {
+    "word": "Stuffed Flatbread",
+    "phrase": "Stuffed flatbread is a pocket full of flavor."
+  },
+  "sushi": {
+    "word": "Sushi",
+    "phrase": "Sushi is a neat rice roll—look how tidy!"
+  },
+  "sweet_potato": {
+    "word": "Roasted Sweet Potato",
+    "phrase": "Roasted sweet potato is warm and sweet—mmm!"
+  },
+  "taco": {
+    "word": "Taco",
+    "phrase": "A taco is a crunchy shell holding a yummy mess."
+  },
+  "takeout_box": {
+    "word": "Takeout Box",
+    "phrase": "The takeout box is a little food suitcase."
+  },
+  "tamale": {
+    "word": "Tamale",
+    "phrase": "A tamale is wrapped up like a tasty gift."
+  },
+  "tangerine": {
+    "word": "Tangerine",
+    "phrase": "Peel the tangerine—its smell is bright and sweet."
+  },
+  "tea": {
+    "word": "Teacup Without Handle",
+    "phrase": "This teacup holds warm tea—careful, it’s hot!"
+  },
+  "teapot": {
+    "word": "Teapot",
+    "phrase": "The teapot pours like a little waterfall."
+  },
+  "tomato": {
+    "word": "Tomato",
+    "phrase": "The tomato is juicy—squish if you squeeze it."
+  },
+  "waffle": {
+    "word": "Waffle",
+    "phrase": "A waffle has tiny squares like a tasty grid."
+  },
+  "watermelon": {
+    "word": "Watermelon",
+    "phrase": "Watermelon is a big sweet slice of summer."
   }
 }

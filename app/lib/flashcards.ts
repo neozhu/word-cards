@@ -25,8 +25,19 @@ export function buildFlashcards(): FlashcardItem[] {
   };
 
   // In @emoji-mart/data@1.x, animals live under the broader "nature" category.
-  const nature = data.categories?.find((c) => c.id === "nature");
-  const categoryEmojiIds = nature?.emojis ?? [];
+  // Food & Drink live under the "foods" category.
+  const categoryIdsToInclude = ["nature", "foods"] as const;
+
+  const categoryEmojiIds: string[] = [];
+  const seen = new Set<string>();
+  for (const categoryId of categoryIdsToInclude) {
+    const cat = data.categories?.find((c) => c.id === categoryId);
+    for (const id of cat?.emojis ?? []) {
+      if (seen.has(id)) continue;
+      seen.add(id);
+      categoryEmojiIds.push(id);
+    }
+  }
 
   const allowedIds = new Set(Object.keys(content));
 
