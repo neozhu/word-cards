@@ -4,7 +4,9 @@ Warm, minimalist English flashcards for kids (3–6) designed for quick daily pr
 Each card pairs a clear word with a short, kid-friendly example phrase.
 Swipe through the deck like real cards—simple UI, big type, and low distraction.
 
-![word-cards screenshot](public/word-cards.png)
+[Try WordPop](https://wordpop.blazorserver.com/)
+
+<img src="docs/wordpop-mobile.png" alt="WordPop flashcards on mobile" width="390">
 
 Swipe left/right to move through cards.
 
