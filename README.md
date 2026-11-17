@@ -31,6 +31,17 @@ npm run dev
 
 Open http://localhost:3000
 
+### Local pronunciation service
+
+Copy `.env.example` to `.env.local` and set `TTS_API_URL` to the speech
+service's base URL and `TTS_API_KEY` to its API key. The default URL is
+`http://127.0.0.1:48731`; requests use model `tts-1` and voice `alloy`. Restart
+`npm run dev` after changing either environment variable. The Vite development
+server proxies speech requests so the key stays on the server.
+
+This proxy is for local development; GitHub Pages and the Docker image need a
+separate server-side proxy for pronunciation.
+
 ## Content
 
 Flashcard content lives in `src/data/vocabData.ts`.

@@ -229,16 +229,6 @@ class SoundEngine {
     this.playMarimbaNote(ctx, 783.99, now, 0.09, 0.14); // G5
   }
 
-  /** Warm 3-note celesta cue for the retained Pronounce button */
-  public playPronounceCue(): void {
-    const ctx = this.ensureContext();
-    if (!ctx) return;
-    const now = ctx.currentTime;
-    this.playMarimbaNote(ctx, 523.25, now, 0.18, 0.16); // C5
-    this.playMarimbaNote(ctx, 659.25, now + 0.07, 0.2, 0.17); // E5
-    this.playMarimbaNote(ctx, 783.99, now + 0.14, 0.32, 0.19); // G5
-  }
-
   /** Joyful ascending sparkle arpeggio when starring a word or winning a quiz */
   public playStarSuccess(): void {
     const ctx = this.ensureContext();

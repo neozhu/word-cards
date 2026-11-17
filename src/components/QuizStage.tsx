@@ -11,7 +11,7 @@ interface QuizStageProps {
   pool: VocabCard[];
   allCards: VocabCard[];
   onMasterWord: (cardId: string) => void;
-  onPronounce?: (card: VocabCard) => void;
+  onPronounce?: (card: VocabCard) => Promise<void>;
 }
 
 export function QuizStage({
@@ -28,7 +28,7 @@ export function QuizStage({
   const [solved, setSolved] = useState(false);
   const [streak, setStreak] = useState(0);
   const [bursts, setBursts] = useState<BurstItem[]>([]);
-  const [pronounceNotice, setPronounceNotice] = useState(false);
+  const [pronounceNotice, setPronounceNotice] = useState('');
   const burstCounter = useRef(0);
   const autoAdvanceTimerRef = useRef<number | null>(null);
   const isFirstMount = useRef(true);
@@ -47,7 +47,7 @@ export function QuizStage({
       setSelectedId(null);
       setWrongIds([]);
       setSolved(false);
-      setPronounceNotice(false);
+      setPronounceNotice('');
     },
     [pool, allCards, clearAutoAdvance]
   );
@@ -113,12 +113,13 @@ export function QuizStage({
     advanceQuestion(question.target.id);
   };
 
-  const handlePronounce = () => {
-    if (!question) return;
-    soundEngine.playPronounceCue();
-    setPronounceNotice(true);
-    if (onPronounce) {
-      onPronounce(question.target);
+  const handlePronounce = async () => {
+    if (!question || !onPronounce) return;
+    setPronounceNotice('');
+    try {
+      await onPronounce(question.target);
+    } catch {
+      setPronounceNotice("Couldn't play audio. Please try again.");
     }
   };
 
@@ -205,8 +206,9 @@ export function QuizStage({
                         exit={{ opacity: 0 }}
                         transition={{ duration: 0.16 }}
                         className="text-[11px] font-medium text-indigo-600/80"
+                        role="status"
                       >
-                        Voice button ready · TTS API connects here later
+                        {pronounceNotice}
                       </motion.p>
                     )}
                   </AnimatePresence>

@@ -30,8 +30,7 @@ interface FlashcardStageProps {
   onPrev: () => void;
   onToggleMastered: (cardId: string) => void;
   onEnsureMastered?: (cardId: string) => void;
-  /** Reserved hook for future TTS / pronunciation API integration */
-  onPronounce?: (card: VocabCard) => void;
+  onPronounce?: (card: VocabCard, text?: string, queue?: boolean) => Promise<void>;
 }
 
 interface FlashcardItemProps {
@@ -45,7 +44,7 @@ interface FlashcardItemProps {
   onPrev: () => void;
   onToggleMastered: (cardId: string) => void;
   onEnsureMastered?: (cardId: string) => void;
-  onPronounce?: (card: VocabCard) => void;
+  onPronounce?: (card: VocabCard, text?: string, queue?: boolean) => Promise<void>;
   onSpawnBurst: (kind: 'star' | 'emoji') => void;
 }
 
@@ -129,12 +128,11 @@ function FlashcardItem({
   const [lockedFlipped, setLockedFlipped] = useState(isFlipped);
   const [emojiBounceKey, setEmojiBounceKey] = useState(0);
   const [pronouncing, setPronouncing] = useState(false);
-  const [pronounceNotice, setPronounceNotice] = useState(false);
+  const [pronounceNotice, setPronounceNotice] = useState('');
   const [isDragging, setIsDragging] = useState(false);
   const [activeLetterIdx, setActiveLetterIdx] = useState<number | null>(null);
   const [spelledCount, setSpelledCount] = useState(0);
   const didDragRef = useRef(false);
-  const pronounceTimerRef = useRef<number | null>(null);
   const letterTimerRef = useRef<number | null>(null);
 
   // Lock face state while exiting so flipped cards don't twist mid-air on dismiss
@@ -175,9 +173,6 @@ function FlashcardItem({
 
   useEffect(() => {
     return () => {
-      if (pronounceTimerRef.current) {
-        window.clearTimeout(pronounceTimerRef.current);
-      }
       if (letterTimerRef.current) {
         window.clearTimeout(letterTimerRef.current);
       }
@@ -190,19 +185,17 @@ function FlashcardItem({
     onSpawnBurst('emoji');
   };
 
-  const handlePronounce = () => {
-    soundEngine.playPronounceCue();
+  const handlePronounce = async (text: string, queue = false) => {
+    if (!onPronounce) return;
     setPronouncing(true);
-    setPronounceNotice(true);
-    if (onPronounce) {
-      onPronounce(card);
-    }
-    if (pronounceTimerRef.current) {
-      window.clearTimeout(pronounceTimerRef.current);
-    }
-    pronounceTimerRef.current = window.setTimeout(() => {
+    setPronounceNotice('');
+    try {
+      await onPronounce(card, text, queue);
+    } catch {
+      setPronounceNotice("Couldn't play audio. Please try again.");
+    } finally {
       setPronouncing(false);
-    }, 900);
+    }
   };
 
   const handleStarClick = () => {
@@ -233,6 +226,9 @@ function FlashcardItem({
 
   const handleLetterClick = (letterPos: number) => {
     const result = stepSpellingProgress(spellableLetters, spelledCount, letterPos);
+    const letter = spellableLetters[letterPos];
+    void onPronounce?.(card, result.completed ? `${letter}. ${card.word}` : letter, true)
+      .catch(() => setPronounceNotice("Couldn't play audio. Please try again."));
     setSpelledCount(result.nextStep);
     setActiveLetterIdx(letterPos);
     if (letterTimerRef.current) {
@@ -248,10 +244,6 @@ function FlashcardItem({
       if (onEnsureMastered) {
         onEnsureMastered(card.id);
       }
-    } else if (result.matched) {
-      soundEngine.playLetterNote(Math.max(0, result.nextStep - 1));
-    } else {
-      soundEngine.playLetterNote(letterPos);
     }
   };
 
@@ -484,7 +476,7 @@ function FlashcardItem({
               <motion.button
                 type="button"
                 whileTap={{ scale: 0.94 }}
-                onClick={handlePronounce}
+                onClick={() => handlePronounce(card.word)}
                 aria-label={`Pronounce ${card.word}`}
                 data-testid={isPresent ? 'pronounce-btn' : undefined}
                 className={`min-h-[48px] px-5 py-2.5 rounded-2xl font-semibold text-sm inline-flex items-center gap-2.5 transition-all cursor-pointer whitespace-nowrap shrink-0 border ${
@@ -550,8 +542,9 @@ function FlashcardItem({
                     transition={{ duration: 0.18 }}
                     className="text-xs font-medium text-indigo-600/80"
                     data-testid={isPresent ? 'pronounce-notice' : undefined}
+                    role="status"
                   >
-                    Voice button ready · TTS API connects here later
+                    {pronounceNotice}
                   </motion.p>
                 )}
               </AnimatePresence>
@@ -751,8 +744,8 @@ function FlashcardItem({
               <motion.button
                 type="button"
                 whileTap={{ scale: 0.94 }}
-                onClick={handlePronounce}
-                aria-label={`Pronounce ${card.word}`}
+                onClick={() => handlePronounce(`${card.phrase}. ${card.sentence}`)}
+                aria-label={`Read phrase and sentence for ${card.word}`}
                 data-testid={isPresent ? 'pronounce-btn-back' : undefined}
                 className={`min-h-[48px] px-5 py-2.5 rounded-2xl font-semibold text-sm inline-flex items-center gap-2.5 transition-all cursor-pointer whitespace-nowrap shrink-0 border ${
                   pronouncing
@@ -815,8 +808,9 @@ function FlashcardItem({
                     exit={{ opacity: 0 }}
                     transition={{ duration: 0.18 }}
                     className="text-xs font-medium text-indigo-600/80"
+                    role="status"
                   >
-                    Voice button ready · TTS API connects here later
+                    {pronounceNotice}
                   </motion.p>
                 )}
               </AnimatePresence>

@@ -33,6 +33,7 @@ import {
   toggleMasteredId,
 } from './utils/deckLogic';
 import { soundEngine } from './utils/soundEngine';
+import { createPronunciationPlayer } from './utils/pronunciation';
 import { BackdropScene } from './components/BackdropScene';
 import { EmojiIcon } from './components/EmojiIcon';
 import { FlashcardStage } from './components/FlashcardStage';
@@ -53,6 +54,7 @@ export default function App() {
   const [isFlipped, setIsFlipped] = useState(false);
   const [milestoneBanner, setMilestoneBanner] = useState<string | null>(null);
   const [isMuted, setIsMuted] = useState(() => soundEngine.isMuted());
+  const pronunciationPlayer = useMemo(() => createPronunciationPlayer(), []);
   const categoryScrollRef = useRef<HTMLDivElement>(null);
   const [masteredIds, setMasteredIds] = useState<string[]>(() => {
     if (typeof window === 'undefined') return [];
@@ -229,13 +231,11 @@ export default function App() {
     soundEngine.setMuted(nextMuted);
   };
 
-  /**
-   * Reserved pronunciation handler.
-   * Plug in your TTS / audio API here later using `card.word`.
-   */
-  const handlePronounce = useCallback((_card: VocabCard) => {
-    // Intentionally left ready for future TTS API integration.
-  }, []);
+  useEffect(() => () => pronunciationPlayer.stop(), [pronunciationPlayer, currentCard?.id, mode]);
+
+  const handlePronounce = useCallback((card: VocabCard, text = card.word, queue = false) => (
+    queue ? pronunciationPlayer.enqueue(text) : pronunciationPlayer.play(text)
+  ), [pronunciationPlayer]);
 
   // Keyboard shortcuts for desktop exploration
   useEffect(() => {
