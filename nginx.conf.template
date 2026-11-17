@@ -1,0 +1,15 @@
+server {
+    listen 80;
+    server_name localhost;
+
+    root /usr/share/nginx/html;
+    index index.html;
+
+    location = /api/speech {
+        proxy_pass ${TTS_API_URL}/v1/audio/speech;
+        proxy_set_header Host $proxy_host;
+        proxy_set_header Authorization "Bearer ${TTS_API_KEY}";
+        proxy_ssl_server_name on;
+        proxy_read_timeout 120s;
+    }
+}

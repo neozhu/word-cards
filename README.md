@@ -39,8 +39,9 @@ service's base URL and `TTS_API_KEY` to its API key. The default URL is
 `npm run dev` after changing either environment variable. The Vite development
 server proxies speech requests so the key stays on the server.
 
-This proxy is for local development; GitHub Pages and the Docker image need a
-separate server-side proxy for pronunciation.
+The Docker image also proxies speech requests using `TTS_API_URL` and
+`TTS_API_KEY` supplied to the container. GitHub Pages needs a separate
+server-side proxy for pronunciation.
 
 ## Content
 
@@ -73,6 +74,11 @@ Portainer's GitOps webhook updates only when the Git commit changes. If you
 manually rebuild the same commit, use **Pull and redeploy** in Portainer to pick
 up the new image. The application is available on port `8080` by default; change
 the host port in `docker-compose.yml` if needed.
+
+Set `TTS_API_URL` and `TTS_API_KEY` in the deployment environment or a Compose
+`.env` file. The URL must be reachable from the container; for a service on the
+Docker host, the Compose default is `http://host.docker.internal:48731`. Recreate
+the container after changing these values.
 
 ## AI Disclosure
 

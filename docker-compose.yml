@@ -3,6 +3,8 @@ services:
     image: ghcr.io/neozhu/word-cards:latest
     ports:
       - "8080:80"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       TTS_API_URL: ${TTS_API_URL:-http://host.docker.internal:48731}
       TTS_API_KEY: ${TTS_API_KEY:-}
