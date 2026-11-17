@@ -1,0 +1,965 @@
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  animate,
+  AnimatePresence,
+  motion,
+  MotionValue,
+  PanInfo,
+  useIsPresent,
+  useMotionValue,
+  useSpring,
+  useTransform,
+} from 'motion/react';
+import { RotateCw, Sparkles, Star, Volume2 } from 'lucide-react';
+import { CATEGORIES, VocabCard } from '../data/vocabData';
+import { getSpellableLetters, stepSpellingProgress } from '../utils/deckLogic';
+import { soundEngine } from '../utils/soundEngine';
+import { EmojiIcon } from './EmojiIcon';
+import { BurstItem, ParticleBurst } from './ParticleBurst';
+
+interface FlashcardStageProps {
+  card: VocabCard;
+  nextCard?: VocabCard;
+  thirdCard?: VocabCard;
+  isFlipped: boolean;
+  isMastered: boolean;
+  direction: number; // 1 for next, -1 for prev
+  shuffleNonce?: number;
+  onFlip: () => void;
+  onNext: () => void;
+  onPrev: () => void;
+  onToggleMastered: (cardId: string) => void;
+  onEnsureMastered?: (cardId: string) => void;
+  /** Reserved hook for future TTS / pronunciation API integration */
+  onPronounce?: (card: VocabCard) => void;
+}
+
+interface FlashcardItemProps {
+  card: VocabCard;
+  isFlipped: boolean;
+  isMastered: boolean;
+  direction: number;
+  stackDragX: MotionValue<number>;
+  onFlip: () => void;
+  onNext: () => void;
+  onPrev: () => void;
+  onToggleMastered: (cardId: string) => void;
+  onEnsureMastered?: (cardId: string) => void;
+  onPronounce?: (card: VocabCard) => void;
+  onSpawnBurst: (kind: 'star' | 'emoji') => void;
+}
+
+const cardVariants = {
+  enter: (dir: number) =>
+    dir >= 0
+      ? {
+          // Rise seamlessly out of the 2nd card's exact resting pose underneath
+          x: 11,
+          y: 14,
+          scale: 0.968,
+          rotate: 2.8,
+          opacity: 1,
+        }
+      : {
+          // Sweep back onto the top of the deck from the left as a solid card
+          x: -260,
+          y: -8,
+          scale: 0.96,
+          rotate: -11,
+          opacity: 0,
+        },
+  center: {
+    x: 0,
+    y: 0,
+    scale: 1,
+    rotate: 0,
+    opacity: 1,
+    transition: {
+      type: 'spring' as const,
+      stiffness: 340,
+      damping: 28,
+      mass: 0.85,
+    },
+  },
+  exit: (dir: number) =>
+    dir >= 0
+      ? {
+          // Stay solid opaque while peeling sideways clear of the deck, then fade at the outer edge
+          x: -320,
+          y: -14,
+          scale: 0.94,
+          rotate: -14,
+          opacity: [1, 1, 0],
+          transition: {
+            duration: 0.28,
+            times: [0, 0.58, 1],
+            ease: [0.22, 1, 0.36, 1] as const,
+          },
+        }
+      : {
+          // Tuck cleanly back down into the 2nd card stack slot without ghosting
+          x: 11,
+          y: 14,
+          scale: 0.968,
+          rotate: 2.8,
+          opacity: [1, 1, 0],
+          transition: {
+            duration: 0.24,
+            times: [0, 0.65, 1],
+            ease: [0.22, 1, 0.36, 1] as const,
+          },
+        },
+};
+
+function FlashcardItem({
+  card,
+  isFlipped,
+  isMastered,
+  direction,
+  stackDragX,
+  onFlip,
+  onNext,
+  onPrev,
+  onToggleMastered,
+  onEnsureMastered,
+  onPronounce,
+  onSpawnBurst,
+}: FlashcardItemProps) {
+  const isPresent = useIsPresent();
+  const [lockedFlipped, setLockedFlipped] = useState(isFlipped);
+  const [emojiBounceKey, setEmojiBounceKey] = useState(0);
+  const [pronouncing, setPronouncing] = useState(false);
+  const [pronounceNotice, setPronounceNotice] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const [activeLetterIdx, setActiveLetterIdx] = useState<number | null>(null);
+  const [spelledCount, setSpelledCount] = useState(0);
+  const didDragRef = useRef(false);
+  const pronounceTimerRef = useRef<number | null>(null);
+  const letterTimerRef = useRef<number | null>(null);
+
+  // Lock face state while exiting so flipped cards don't twist mid-air on dismiss
+  useEffect(() => {
+    if (isPresent) {
+      setLockedFlipped(isFlipped);
+    }
+  }, [isFlipped, isPresent]);
+
+  const effectiveFlipped = isPresent ? isFlipped : lockedFlipped;
+
+  // Subtle 3D hover tilt
+  const cardRef = useRef<HTMLDivElement>(null);
+  const pointerX = useMotionValue(0);
+  const pointerY = useMotionValue(0);
+  const tiltX = useSpring(useTransform(pointerY, [-0.5, 0.5], [4.5, -4.5]), {
+    stiffness: 260,
+    damping: 26,
+  });
+  const tiltY = useSpring(useTransform(pointerX, [-0.5, 0.5], [-4.5, 4.5]), {
+    stiffness: 260,
+    damping: 26,
+  });
+
+  // Per-card drag tracking
+  const dragX = useMotionValue(0);
+  const dragRotate = useTransform(dragX, [-220, 0, 220], [-8, 0, 8]);
+  const nextCueOpacity = useTransform(dragX, [-120, -40, 0], [1, 0.4, 0]);
+  const prevCueOpacity = useTransform(dragX, [0, 40, 120], [0, 0.4, 1]);
+
+  useEffect(() => {
+    return dragX.on('change', (latest) => {
+      if (isPresent) {
+        stackDragX.set(latest);
+      }
+    });
+  }, [dragX, stackDragX, isPresent]);
+
+  useEffect(() => {
+    return () => {
+      if (pronounceTimerRef.current) {
+        window.clearTimeout(pronounceTimerRef.current);
+      }
+      if (letterTimerRef.current) {
+        window.clearTimeout(letterTimerRef.current);
+      }
+    };
+  }, []);
+
+  const handleEmojiPoke = () => {
+    soundEngine.playEmojiBoing();
+    setEmojiBounceKey((k) => k + 1);
+    onSpawnBurst('emoji');
+  };
+
+  const handlePronounce = () => {
+    soundEngine.playPronounceCue();
+    setPronouncing(true);
+    setPronounceNotice(true);
+    if (onPronounce) {
+      onPronounce(card);
+    }
+    if (pronounceTimerRef.current) {
+      window.clearTimeout(pronounceTimerRef.current);
+    }
+    pronounceTimerRef.current = window.setTimeout(() => {
+      setPronouncing(false);
+    }, 900);
+  };
+
+  const handleStarClick = () => {
+    if (!isMastered) {
+      soundEngine.playStarSuccess();
+      onSpawnBurst('star');
+    } else {
+      soundEngine.playUnstar();
+    }
+    onToggleMastered(card.id);
+  };
+
+  const spellableLetters = getSpellableLetters(card.word);
+  let runningLetterPos = -1;
+  const spellTokens = card.word.split('').map((char) => {
+    if (char === ' ') {
+      return { isSpace: true as const, char, letterPos: -1 };
+    }
+    runningLetterPos += 1;
+    return {
+      isSpace: false as const,
+      char: char.toUpperCase(),
+      letterPos: runningLetterPos,
+    };
+  });
+  const isSpellingComplete =
+    spellableLetters.length > 0 && spelledCount >= spellableLetters.length;
+
+  const handleLetterClick = (letterPos: number) => {
+    const result = stepSpellingProgress(spellableLetters, spelledCount, letterPos);
+    setSpelledCount(result.nextStep);
+    setActiveLetterIdx(letterPos);
+    if (letterTimerRef.current) {
+      window.clearTimeout(letterTimerRef.current);
+    }
+    letterTimerRef.current = window.setTimeout(() => {
+      setActiveLetterIdx(null);
+    }, 260);
+
+    if (result.completed) {
+      soundEngine.playStarSuccess();
+      onSpawnBurst('star');
+      if (onEnsureMastered) {
+        onEnsureMastered(card.id);
+      }
+    } else if (result.matched) {
+      soundEngine.playLetterNote(Math.max(0, result.nextStep - 1));
+    } else {
+      soundEngine.playLetterNote(letterPos);
+    }
+  };
+
+  const handleCardSurfaceClick = (e: React.MouseEvent<HTMLElement>) => {
+    if (!isPresent || didDragRef.current) return;
+    if ((e.target as HTMLElement).closest('button, a, [role="button"]')) {
+      return;
+    }
+    onFlip();
+  };
+
+  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isPresent || e.pointerType !== 'mouse' || !cardRef.current) return;
+    const rect = cardRef.current.getBoundingClientRect();
+    const nx = (e.clientX - rect.left) / rect.width - 0.5;
+    const ny = (e.clientY - rect.top) / rect.height - 0.5;
+    pointerX.set(nx);
+    pointerY.set(ny);
+  };
+
+  const handlePointerLeave = () => {
+    pointerX.set(0);
+    pointerY.set(0);
+  };
+
+  const handleDragEnd = (
+    _: MouseEvent | TouchEvent | PointerEvent,
+    info: PanInfo
+  ) => {
+    setIsDragging(false);
+    window.setTimeout(() => {
+      didDragRef.current = false;
+    }, 90);
+    const threshold = 90;
+    const velocityThreshold = 420;
+    if (info.offset.x < -threshold || info.velocity.x < -velocityThreshold) {
+      onNext();
+    } else if (info.offset.x > threshold || info.velocity.x > velocityThreshold) {
+      onPrev();
+    } else {
+      animate(stackDragX, 0, { type: 'spring', stiffness: 360, damping: 28 });
+    }
+  };
+
+  const categoryMeta =
+    CATEGORIES.find((c) => c.id === card.category) ?? CATEGORIES[1];
+
+  // When advancing Next, exiting card peels off ON TOP (z-30) over rising new card (z-20).
+  // When going Prev, incoming previous card lands ON TOP (z-20) over tucking card (z-10).
+  const zClass = isPresent
+    ? 'z-20'
+    : direction >= 0
+    ? 'z-30 pointer-events-none'
+    : 'z-10 pointer-events-none';
+
+  return (
+    <motion.div
+      ref={cardRef}
+      custom={direction}
+      variants={cardVariants}
+      initial="enter"
+      animate="center"
+      exit="exit"
+      drag={isPresent ? 'x' : false}
+      dragConstraints={{ left: 0, right: 0 }}
+      dragElastic={0.42}
+      onDragStart={() => {
+        didDragRef.current = true;
+        setIsDragging(true);
+      }}
+      onDragEnd={handleDragEnd}
+      onPointerMove={handlePointerMove}
+      onPointerLeave={handlePointerLeave}
+      style={{
+        x: dragX,
+        rotate: dragRotate,
+        rotateX: tiltX,
+        rotateY: tiltY,
+      }}
+      className={`col-start-1 row-start-1 w-full relative perspective-1400 cursor-grab active:cursor-grabbing ${zClass}`}
+    >
+      {/* Swipe Directional Indicators (only visible during active drag) */}
+      {isDragging && isPresent && (
+        <>
+          <motion.div
+            style={{ opacity: prevCueOpacity }}
+            className="pointer-events-none absolute -left-3 top-1/2 -translate-y-1/2 z-30 bg-white border border-slate-200 shadow-md rounded-2xl px-3 py-1.5 text-xs font-semibold text-slate-700 whitespace-nowrap"
+          >
+            ← Prev
+          </motion.div>
+          <motion.div
+            style={{ opacity: nextCueOpacity }}
+            className="pointer-events-none absolute -right-3 top-1/2 -translate-y-1/2 z-30 bg-white border border-slate-200 shadow-md rounded-2xl px-3 py-1.5 text-xs font-semibold text-slate-700 whitespace-nowrap"
+          >
+            Next →
+          </motion.div>
+        </>
+      )}
+
+      {/* 3D Flipper Shell with subtle physical lift */}
+      <motion.div
+        animate={{
+          rotateY: effectiveFlipped ? 180 : 0,
+          y: effectiveFlipped ? -3 : 0,
+        }}
+        transition={{
+          type: 'spring',
+          stiffness: 260,
+          damping: 24,
+          mass: 0.85,
+        }}
+        className="preserve-3d relative w-full min-h-[452px] sm:min-h-[545px]"
+      >
+        {/* ==================== FRONT FACE ==================== */}
+        <section
+          aria-label={isPresent ? `${card.word} flashcard front` : undefined}
+          aria-hidden={!isPresent || effectiveFlipped}
+          data-testid={isPresent ? 'card-front' : undefined}
+          onClick={handleCardSurfaceClick}
+          className={`backface-hidden absolute inset-0 rounded-[32px] bg-white border cardstock-shadow-active p-5 sm:p-8 flex flex-col justify-between transition-colors duration-300 ${
+            isMastered
+              ? 'border-amber-300/85 bg-[radial-gradient(circle_at_top_right,rgba(253,230,138,0.28),transparent_46%)]'
+              : 'border-slate-200/95'
+          } ${
+            effectiveFlipped || !isPresent
+              ? 'pointer-events-none'
+              : 'pointer-events-auto'
+          }`}
+        >
+          {/* Top Row: Quiet Category Kicker + Star Mastery Toggle */}
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-2 text-xs font-medium text-slate-500">
+              <span
+                className="inline-block w-2 h-2 rounded-full"
+                style={{ backgroundColor: categoryMeta.accentHex }}
+                aria-hidden="true"
+              />
+              <span>{categoryMeta.label}</span>
+            </div>
+
+            <motion.button
+              type="button"
+              whileTap={{ scale: 0.85 }}
+              onClick={handleStarClick}
+              aria-label={
+                isMastered
+                  ? `Unstar ${card.word}`
+                  : `Mark ${card.word} as learned`
+              }
+              aria-pressed={isMastered}
+              data-testid={isPresent ? 'star-btn-front' : undefined}
+              className={`min-w-[44px] min-h-[44px] inline-flex items-center justify-center rounded-2xl transition-colors cursor-pointer ${
+                isMastered
+                  ? 'bg-amber-50 text-amber-500 border border-amber-200'
+                  : 'bg-slate-50 text-slate-400 hover:text-amber-500 hover:bg-amber-50/60 border border-slate-200/70'
+              }`}
+            >
+              <Star
+                className="w-5 h-5"
+                fill={isMastered ? 'currentColor' : 'none'}
+                strokeWidth={2.2}
+              />
+            </motion.button>
+          </div>
+
+          {/* Center Stage: Interactive Bouncing Emoji + Word */}
+          <div className="flex flex-col items-center text-center my-auto py-2">
+            <motion.button
+              type="button"
+              key={`emoji-${card.id}-${emojiBounceKey}`}
+              onClick={handleEmojiPoke}
+              whileHover={{ scale: 1.06 }}
+              whileTap={{ scale: 0.9 }}
+              initial={
+                emojiBounceKey > 0 ? { scaleX: 1, scaleY: 1 } : false
+              }
+              animate={
+                emojiBounceKey > 0
+                  ? {
+                      scaleX: [1, 1.24, 0.86, 1.08, 1],
+                      scaleY: [1, 0.76, 1.18, 0.94, 1],
+                      rotate: [0, -6, 6, -3, 0],
+                    }
+                  : { y: [0, -5, 0] }
+              }
+              transition={
+                emojiBounceKey > 0
+                  ? { duration: 0.45, ease: [0.16, 1, 0.3, 1] }
+                  : {
+                      duration: 3.4,
+                      repeat: Infinity,
+                      ease: 'easeInOut',
+                    }
+              }
+              aria-label={`Tap ${card.word} emoji for bounce`}
+              data-testid={isPresent ? 'emoji-trigger' : undefined}
+              className="group relative w-32 h-32 sm:w-42 sm:h-42 rounded-full flex items-center justify-center cursor-pointer ring-4 ring-white shadow-[inset_0_3px_10px_rgba(15,23,42,0.06),0_10px_24px_-10px_rgba(15,23,42,0.14)] transition-shadow hover:shadow-[inset_0_3px_10px_rgba(15,23,42,0.06),0_14px_28px_-8px_rgba(79,70,229,0.22)] focus-visible:ring-4 focus-visible:ring-indigo-200 overflow-hidden"
+              style={{ backgroundColor: card.stageTint }}
+            >
+              <span
+                aria-hidden="true"
+                className="pointer-events-none absolute inset-0 rounded-full bg-[radial-gradient(circle_at_30%_24%,rgba(255,255,255,0.78),transparent_58%)]"
+              />
+              <EmojiIcon
+                src={card.iconUrl}
+                fallbackEmoji={card.emoji}
+                className="relative z-10 w-22 h-22 sm:w-30 sm:h-30 object-contain drop-shadow-[0_10px_16px_rgba(15,23,42,0.15)]"
+                fallbackClassName="relative z-10 text-[4.75rem] sm:text-[6.5rem] leading-none"
+              />
+              <span className="sr-only">{card.word}</span>
+            </motion.button>
+
+            <h2 className="mt-4 font-display text-4xl sm:text-[2.75rem] font-extrabold tracking-tight text-slate-900 leading-tight">
+              {card.word}
+            </h2>
+            <p className="mt-0.5 text-sm font-medium text-slate-400 tracking-wide">
+              {card.phonetic}
+            </p>
+            <p
+              className="mt-2 font-display text-base sm:text-lg font-semibold text-indigo-600"
+              data-testid={isPresent ? 'card-phrase-front' : undefined}
+            >
+              “{card.phrase}”
+            </p>
+          </div>
+
+          {/* Bottom Action Row: Retained Pronounce Button + Flip Card Button */}
+          <div className="space-y-2.5">
+            <div className="flex items-center justify-center gap-3">
+              <motion.button
+                type="button"
+                whileTap={{ scale: 0.94 }}
+                onClick={handlePronounce}
+                aria-label={`Pronounce ${card.word}`}
+                data-testid={isPresent ? 'pronounce-btn' : undefined}
+                className={`min-h-[48px] px-5 py-2.5 rounded-2xl font-semibold text-sm inline-flex items-center gap-2.5 transition-all cursor-pointer whitespace-nowrap shrink-0 border ${
+                  pronouncing
+                    ? 'bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-500/20'
+                    : 'bg-indigo-50 text-indigo-700 border-indigo-200/80 hover:bg-indigo-100'
+                }`}
+              >
+                <Volume2 className="w-4 h-4 shrink-0" strokeWidth={2.3} />
+                <span>Listen</span>
+                <span
+                  className="inline-flex items-end gap-0.5 h-3.5 w-4 justify-center"
+                  aria-hidden="true"
+                >
+                  {[0, 1, 2].map((bar) => (
+                    <motion.span
+                      key={bar}
+                      animate={
+                        pronouncing
+                          ? {
+                              scaleY: [0.4, 1.15, 0.5, 1, 0.4],
+                            }
+                          : { scaleY: 0.45 }
+                      }
+                      transition={
+                        pronouncing
+                          ? {
+                              duration: 0.55,
+                              repeat: Infinity,
+                              delay: bar * 0.12,
+                            }
+                          : { duration: 0.2 }
+                      }
+                      className={`w-[2.5px] h-full rounded-full origin-bottom ${
+                        pronouncing ? 'bg-white' : 'bg-indigo-500/70'
+                      }`}
+                    />
+                  ))}
+                </span>
+              </motion.button>
+
+              <motion.button
+                type="button"
+                whileTap={{ scale: 0.94 }}
+                onClick={onFlip}
+                aria-label={`Flip ${card.word} card to see meaning`}
+                data-testid={isPresent ? 'flip-btn' : undefined}
+                className="min-h-[48px] px-5 py-2.5 rounded-2xl font-semibold text-sm bg-slate-900 text-white hover:bg-slate-800 inline-flex items-center gap-2 transition-colors cursor-pointer whitespace-nowrap shrink-0 shadow-sm"
+              >
+                <RotateCw className="w-4 h-4 shrink-0" strokeWidth={2.2} />
+                <span>Flip Card</span>
+              </motion.button>
+            </div>
+
+            <div className="h-5 flex items-center justify-center">
+              <AnimatePresence>
+                {pronounceNotice && (
+                  <motion.p
+                    initial={{ opacity: 0, y: 3 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.18 }}
+                    className="text-xs font-medium text-indigo-600/80"
+                    data-testid={isPresent ? 'pronounce-notice' : undefined}
+                  >
+                    Voice button ready · TTS API connects here later
+                  </motion.p>
+                )}
+              </AnimatePresence>
+            </div>
+          </div>
+        </section>
+
+        {/* ==================== BACK FACE ==================== */}
+        <section
+          aria-label={isPresent ? `${card.word} flashcard back` : undefined}
+          aria-hidden={!isPresent || !effectiveFlipped}
+          data-testid={isPresent ? 'card-back' : undefined}
+          onClick={handleCardSurfaceClick}
+          className={`backface-hidden rotate-y-180 absolute inset-0 rounded-[32px] bg-white border cardstock-shadow-active p-5 sm:p-8 flex flex-col justify-between transition-colors duration-300 ${
+            isMastered
+              ? 'border-amber-300/85 bg-[radial-gradient(circle_at_top_right,rgba(253,230,138,0.24),transparent_44%)]'
+              : 'border-slate-200/95'
+          } ${
+            effectiveFlipped && isPresent
+              ? 'pointer-events-auto'
+              : 'pointer-events-none'
+          }`}
+        >
+          {/* Top Row */}
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-2.5">
+              <span
+                className="w-10 h-10 rounded-xl flex items-center justify-center"
+                style={{ backgroundColor: card.stageTint }}
+                aria-hidden="true"
+              >
+                <EmojiIcon
+                  src={card.iconUrl}
+                  fallbackEmoji={card.emoji}
+                  className="w-6 h-6 object-contain"
+                  fallbackClassName="text-xl leading-none"
+                />
+              </span>
+              <div>
+                <p className="font-display font-bold text-base text-slate-900 leading-none">
+                  {card.word}
+                </p>
+                <p className="text-xs text-slate-500 mt-1">{card.phonetic}</p>
+              </div>
+            </div>
+
+            <motion.button
+              type="button"
+              whileTap={{ scale: 0.85 }}
+              onClick={handleStarClick}
+              aria-label={
+                isMastered
+                  ? `Unstar ${card.word}`
+                  : `Mark ${card.word} as learned`
+              }
+              aria-pressed={isMastered}
+              data-testid={isPresent ? 'star-btn-back' : undefined}
+              className={`min-w-[44px] min-h-[44px] inline-flex items-center justify-center rounded-2xl transition-colors cursor-pointer ${
+                isMastered
+                  ? 'bg-amber-50 text-amber-500 border border-amber-200'
+                  : 'bg-slate-50 text-slate-400 hover:text-amber-500 hover:bg-amber-50/60 border border-slate-200/70'
+              }`}
+            >
+              <Star
+                className="w-5 h-5"
+                fill={isMastered ? 'currentColor' : 'none'}
+                strokeWidth={2.2}
+              />
+            </motion.button>
+          </div>
+
+          {/* Center: Quick Phrase, Musical Letter Tiles & Story Sentence */}
+          <div className="my-auto py-2 flex flex-col items-center text-center">
+            <span className="text-xs font-medium text-slate-400 tracking-wide">
+              Quick Phrase
+            </span>
+            <h3
+              className="mt-1 font-display text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight"
+              data-testid={isPresent ? 'card-phrase-back' : undefined}
+            >
+              “{card.phrase}”
+            </h3>
+
+            {/* Interactive Sequential Spelling Game */}
+            <div className="mt-3.5 flex flex-col items-center">
+              <div className="mb-2 h-4 flex items-center gap-2 text-[11px] font-semibold">
+                {isSpellingComplete ? (
+                  <motion.span
+                    initial={{ scale: 0.85, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    className="inline-flex items-center gap-1 text-emerald-600"
+                    data-testid={isPresent ? 'spelling-complete-badge' : undefined}
+                  >
+                    <Sparkles className="w-3 h-3" />
+                    <span>Nice spelling! Star earned</span>
+                  </motion.span>
+                ) : (
+                  <span className="text-slate-400">
+                    Tap letters in order · {spelledCount}/{spellableLetters.length}
+                  </span>
+                )}
+              </div>
+
+              <div
+                className="flex flex-wrap items-center justify-center gap-1.5"
+                aria-label={`Spell ${card.word}`}
+              >
+                {spellTokens.map((token, idx) => {
+                  if (token.isSpace) {
+                    return (
+                      <span key={`space-${idx}`} className="w-2" aria-hidden="true" />
+                    );
+                  }
+                  const pos = token.letterPos;
+                  const isDone = pos < spelledCount;
+                  const isNext = !isSpellingComplete && pos === spelledCount;
+                  const isJustTapped = activeLetterIdx === pos;
+
+                  return (
+                    <motion.button
+                      key={`${card.id}-char-${idx}`}
+                      type="button"
+                      whileHover={{ y: isNext ? -3 : -2 }}
+                      whileTap={{ scale: 0.85 }}
+                      animate={
+                        isSpellingComplete
+                          ? { y: [0, -4, 0], scale: [1, 1.12, 1] }
+                          : isJustTapped
+                          ? { y: -5, scale: 1.1 }
+                          : isNext
+                          ? { y: -2, scale: 1.02 }
+                          : effectiveFlipped
+                          ? { y: 0, scale: 1 }
+                          : { y: 4, scale: 0.94 }
+                      }
+                      transition={
+                        isSpellingComplete
+                          ? {
+                              duration: 0.34,
+                              delay: pos * 0.04,
+                              ease: [0.16, 1, 0.3, 1],
+                            }
+                          : {
+                              type: 'spring',
+                              stiffness: 420,
+                              damping: 24,
+                              delay: isJustTapped || isNext ? 0 : idx * 0.025,
+                            }
+                      }
+                      onClick={() => handleLetterClick(pos)}
+                      aria-label={`Letter ${token.char}`}
+                      data-testid={
+                        isPresent ? `spell-letter-${pos}` : undefined
+                      }
+                      className={`relative w-8 h-9 sm:w-9 sm:h-10 rounded-xl border font-display font-bold text-sm sm:text-base inline-flex items-center justify-center transition-colors cursor-pointer ${
+                        isSpellingComplete
+                          ? 'bg-emerald-500 text-white border-emerald-500 shadow-xs'
+                          : isDone
+                          ? 'bg-indigo-600 text-white border-indigo-600 shadow-xs'
+                          : isNext
+                          ? 'bg-indigo-50 text-indigo-700 border-indigo-300'
+                          : 'bg-slate-100 hover:bg-indigo-50 border-slate-200/80 hover:border-indigo-200 text-slate-800 hover:text-indigo-700'
+                      }`}
+                    >
+                      {isNext && (
+                        <motion.span
+                          aria-hidden="true"
+                          animate={{ opacity: [0.35, 0.95, 0.35] }}
+                          transition={{
+                            duration: 1.5,
+                            repeat: Infinity,
+                            ease: 'easeInOut',
+                          }}
+                          className="pointer-events-none absolute -inset-0.5 rounded-xl ring-2 ring-indigo-300"
+                        />
+                      )}
+                      <span className="relative z-10">{token.char}</span>
+                    </motion.button>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="mt-4 w-full rounded-2xl bg-slate-50/90 border border-slate-200/70 p-4 text-left">
+              <p className="text-[11px] font-semibold text-indigo-600 tracking-wide">
+                Story Sentence
+              </p>
+              <p className="mt-1 text-sm sm:text-base font-semibold text-slate-800 leading-snug">
+                “{card.sentence}”
+              </p>
+            </div>
+          </div>
+
+          {/* Bottom Action Row */}
+          <div className="space-y-2.5">
+            <div className="flex items-center justify-center gap-3">
+              <motion.button
+                type="button"
+                whileTap={{ scale: 0.94 }}
+                onClick={handlePronounce}
+                aria-label={`Pronounce ${card.word}`}
+                data-testid={isPresent ? 'pronounce-btn-back' : undefined}
+                className={`min-h-[48px] px-5 py-2.5 rounded-2xl font-semibold text-sm inline-flex items-center gap-2.5 transition-all cursor-pointer whitespace-nowrap shrink-0 border ${
+                  pronouncing
+                    ? 'bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-500/20'
+                    : 'bg-indigo-50 text-indigo-700 border-indigo-200/80 hover:bg-indigo-100'
+                }`}
+              >
+                <Volume2 className="w-4 h-4 shrink-0" strokeWidth={2.3} />
+                <span>Listen</span>
+                <span
+                  className="inline-flex items-end gap-0.5 h-3.5 w-4 justify-center"
+                  aria-hidden="true"
+                >
+                  {[0, 1, 2].map((bar) => (
+                    <motion.span
+                      key={bar}
+                      animate={
+                        pronouncing
+                          ? {
+                              scaleY: [0.4, 1.15, 0.5, 1, 0.4],
+                            }
+                          : { scaleY: 0.45 }
+                      }
+                      transition={
+                        pronouncing
+                          ? {
+                              duration: 0.55,
+                              repeat: Infinity,
+                              delay: bar * 0.12,
+                            }
+                          : { duration: 0.2 }
+                      }
+                      className={`w-[2.5px] h-full rounded-full origin-bottom ${
+                        pronouncing ? 'bg-white' : 'bg-indigo-500/70'
+                      }`}
+                    />
+                  ))}
+                </span>
+              </motion.button>
+
+              <motion.button
+                type="button"
+                whileTap={{ scale: 0.94 }}
+                onClick={onFlip}
+                aria-label={`Flip ${card.word} card back to front`}
+                data-testid={isPresent ? 'flip-btn-back' : undefined}
+                className="min-h-[48px] px-5 py-2.5 rounded-2xl font-semibold text-sm bg-slate-900 text-white hover:bg-slate-800 inline-flex items-center gap-2 transition-colors cursor-pointer whitespace-nowrap shrink-0 shadow-sm"
+              >
+                <RotateCw className="w-4 h-4 shrink-0" strokeWidth={2.2} />
+                <span>Show Emoji</span>
+              </motion.button>
+            </div>
+            <div className="h-5 flex items-center justify-center">
+              <AnimatePresence>
+                {pronounceNotice && (
+                  <motion.p
+                    initial={{ opacity: 0, y: 3 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.18 }}
+                    className="text-xs font-medium text-indigo-600/80"
+                  >
+                    Voice button ready · TTS API connects here later
+                  </motion.p>
+                )}
+              </AnimatePresence>
+            </div>
+          </div>
+        </section>
+      </motion.div>
+    </motion.div>
+  );
+}
+
+export function FlashcardStage({
+  card,
+  nextCard,
+  thirdCard,
+  isFlipped,
+  isMastered,
+  direction,
+  shuffleNonce = 0,
+  onFlip,
+  onNext,
+  onPrev,
+  onToggleMastered,
+  onEnsureMastered,
+  onPronounce,
+}: FlashcardStageProps) {
+  const [bursts, setBursts] = useState<BurstItem[]>([]);
+  const burstCounter = useRef(0);
+
+  // Shared MotionValue reflecting top-card drag for continuous stacked-card lift
+  const stackDragX = useMotionValue(0);
+  const peekScale = useTransform(stackDragX, [-180, 0, 180], [0.995, 0.968, 0.995]);
+  const peekRotate = useTransform(stackDragX, [-180, 0, 180], [0.4, 2.8, 0.4]);
+  const peekX = useTransform(stackDragX, [-180, 0, 180], [2, 11, 2]);
+  const peekY = useTransform(stackDragX, [-180, 0, 180], [4, 14, 4]);
+
+  const thirdScale = useTransform(stackDragX, [-180, 0, 180], [0.968, 0.945, 0.968]);
+  const thirdRotate = useTransform(stackDragX, [-180, 0, 180], [-1.2, -3, -1.2]);
+  const thirdX = useTransform(stackDragX, [-180, 0, 180], [-4, -10, -4]);
+  const thirdY = useTransform(stackDragX, [-180, 0, 180], [14, 24, 14]);
+
+  useEffect(() => {
+    animate(stackDragX, 0, {
+      type: 'spring',
+      stiffness: 340,
+      damping: 28,
+    });
+  }, [card.id, stackDragX]);
+
+  const spawnBurst = useCallback((kind: 'star' | 'emoji') => {
+    const id = ++burstCounter.current;
+    setBursts((prev) => [...prev.slice(-3), { id, kind }]);
+    window.setTimeout(() => {
+      setBursts((prev) => prev.filter((item) => item.id !== id));
+    }, 700);
+  }, []);
+
+  return (
+    <div
+      className="relative w-full max-w-[440px] mx-auto select-none"
+      data-testid="card-stage"
+    >
+      <ParticleBurst bursts={bursts} />
+
+      {/* Physical Fanned Deck Stack Behind Active Card */}
+      {thirdCard && (
+        <motion.div
+          key={`third-${thirdCard.id}-${shuffleNonce}`}
+          aria-hidden="true"
+          initial={{ opacity: 0.6, scale: 0.935 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.25, ease: 'easeOut' }}
+          className="absolute inset-0 rounded-[32px] border border-slate-300/75 cardstock-shadow pointer-events-none overflow-hidden"
+          style={{
+            backgroundColor: thirdCard.stageTint,
+            scale: thirdScale,
+            rotate: thirdRotate,
+            x: thirdX,
+            y: thirdY,
+          }}
+        >
+          <div className="absolute inset-[3px] rounded-[29px] bg-white/88" />
+        </motion.div>
+      )}
+
+      {nextCard && (
+        <motion.div
+          key={`next-${nextCard.id}-${shuffleNonce}`}
+          aria-hidden="true"
+          initial={{ opacity: 0.7, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.25, ease: 'easeOut' }}
+          style={{
+            scale: peekScale,
+            rotate: peekRotate,
+            x: peekX,
+            y: peekY,
+          }}
+          className="absolute inset-0 rounded-[32px] bg-white border border-slate-200/95 cardstock-shadow pointer-events-none p-5 sm:p-8 flex flex-col justify-between overflow-hidden"
+        >
+          {/* Subtle peeking card header accent so users feel the next real card beneath */}
+          <div className="flex items-center justify-between">
+            <span
+              className="w-2.5 h-2.5 rounded-full opacity-70"
+              style={{ backgroundColor: nextCard.stageTint }}
+            />
+            <span className="w-8 h-8 rounded-xl bg-slate-100/80 border border-slate-200/60" />
+          </div>
+          <div className="my-auto flex items-center justify-center">
+            <div
+              className="w-32 h-32 sm:w-40 sm:h-40 rounded-full flex items-center justify-center opacity-50"
+              style={{ backgroundColor: nextCard.stageTint }}
+            >
+              <EmojiIcon
+                src={nextCard.iconUrl}
+                fallbackEmoji={nextCard.emoji}
+                className="w-20 h-20 sm:w-28 sm:h-28 object-contain"
+                fallbackClassName="text-6xl"
+              />
+            </div>
+          </div>
+          <div className="h-10" />
+        </motion.div>
+      )}
+
+      {/* Active Card Slot: Grid overlay lets exiting and entering cards animate simultaneously with zero empty gap */}
+      <div className="grid grid-cols-1 relative z-10 perspective-1400">
+        <AnimatePresence initial={false} custom={direction}>
+          <FlashcardItem
+            key={`${card.id}-${shuffleNonce}`}
+            card={card}
+            isFlipped={isFlipped}
+            isMastered={isMastered}
+            direction={direction}
+            stackDragX={stackDragX}
+            onFlip={onFlip}
+            onNext={onNext}
+            onPrev={onPrev}
+            onToggleMastered={onToggleMastered}
+            onEnsureMastered={onEnsureMastered}
+            onPronounce={onPronounce}
+            onSpawnBurst={spawnBurst}
+          />
+        </AnimatePresence>
+      </div>
+    </div>
+  );
+}

@@ -1,0 +1,90 @@
+@import "tailwindcss";
+
+@theme {
+  --font-display: "Outfit", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
+}
+
+@layer base {
+  html,
+  body {
+    font-family: var(--font-sans);
+    background-color: #faf8f3;
+    color: #0f172a;
+    overflow-x: clip;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overscroll-behavior-y: contain;
+  }
+
+  button:focus-visible,
+  a:focus-visible {
+    outline: 2px solid #4f46e5;
+    outline-offset: 2px;
+  }
+}
+
+.perspective-1400 {
+  perspective: 1400px;
+}
+
+.preserve-3d {
+  transform-style: preserve-3d;
+}
+
+.backface-hidden {
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+
+.rotate-y-180 {
+  transform: rotateY(180deg);
+}
+
+/* Warm sunlit storybook paper base */
+.studio-canvas {
+  background-color: #faf8f3;
+}
+
+/* Subtle tactile dot grid layered over ambient pastel washes */
+.studio-dot-overlay {
+  background-image: radial-gradient(rgba(79, 70, 229, 0.065) 1.25px, transparent 1.25px);
+  background-size: 26px 26px;
+}
+
+/* Subtle paper grain elevation for flashcards */
+.cardstock-shadow {
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    0 2px 4px rgba(15, 23, 42, 0.05),
+    0 12px 28px -8px rgba(15, 23, 42, 0.09),
+    0 24px 48px -16px rgba(15, 23, 42, 0.07);
+}
+
+.cardstock-shadow-active {
+  box-shadow:
+    inset 0 1.5px 0 rgba(255, 255, 255, 1),
+    0 5px 0 -1px rgba(226, 232, 240, 0.92),
+    0 8px 16px -4px rgba(15, 23, 42, 0.08),
+    0 24px 44px -12px rgba(15, 23, 42, 0.14),
+    0 38px 68px -18px rgba(79, 70, 229, 0.08);
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

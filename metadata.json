@@ -1,0 +1,6 @@
+{
+  "name": "WordPop — Kids Emoji Flashcards",
+  "description": "A tactile, minimalist English flashcard studio for kids with emoji vocabulary, spring animations, and synthesized sound effects.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
