@@ -441,7 +441,11 @@ function FlashcardItem({
               aria-label={`Tap ${card.word} emoji for bounce`}
               data-testid={isPresent ? 'emoji-trigger' : undefined}
               className="group relative w-32 h-32 sm:w-42 sm:h-42 rounded-full flex items-center justify-center cursor-pointer ring-4 ring-white shadow-[inset_0_3px_10px_rgba(15,23,42,0.06),0_10px_24px_-10px_rgba(15,23,42,0.14)] transition-shadow hover:shadow-[inset_0_3px_10px_rgba(15,23,42,0.06),0_14px_28px_-8px_rgba(79,70,229,0.22)] focus-visible:ring-4 focus-visible:ring-indigo-200 overflow-hidden"
-              style={{ backgroundColor: card.stageTint }}
+              style={{
+                backgroundColor: card.stageTint,
+                visibility: effectiveFlipped ? 'hidden' : 'visible',
+                transition: 'visibility 0s 150ms, box-shadow 150ms',
+              }}
             >
               <span
                 aria-hidden="true"
