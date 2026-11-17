@@ -53,6 +53,7 @@ export default function App() {
   const [isFlipped, setIsFlipped] = useState(false);
   const [milestoneBanner, setMilestoneBanner] = useState<string | null>(null);
   const [isMuted, setIsMuted] = useState(() => soundEngine.isMuted());
+  const categoryScrollRef = useRef<HTMLDivElement>(null);
   const [masteredIds, setMasteredIds] = useState<string[]>(() => {
     if (typeof window === 'undefined') return [];
     try {
@@ -393,10 +394,22 @@ export default function App() {
       <main className="relative z-10 flex-1 w-full max-w-5xl mx-auto px-4 sm:px-6 py-2 sm:py-6 flex flex-col items-center justify-center">
         {/* Category Filter Tabs with Sliding Active Pill */}
         <LayoutGroup id="category-tabs">
+          <div className="w-full max-w-2xl flex items-center gap-2 mb-4 sm:mb-7">
+            <button
+              type="button"
+              aria-label="Scroll categories left"
+              aria-controls="word-categories"
+              onClick={() => categoryScrollRef.current?.scrollBy({ left: -240, behavior: 'smooth' })}
+              className="hidden [@media(any-pointer:fine)]:inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-slate-200/80 bg-white/85 text-slate-600 hover:bg-white"
+            >
+              <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+            </button>
           <div
+            ref={categoryScrollRef}
+            id="word-categories"
             role="tablist"
             aria-label="Word categories"
-            className="no-scrollbar w-full max-w-2xl flex flex-nowrap items-center gap-2 overflow-x-auto py-1 mb-4 sm:mb-7"
+            className="no-scrollbar min-w-0 flex-1 flex flex-nowrap items-center gap-2 overflow-x-auto py-1"
           >
             {CATEGORIES.map((cat) => {
               const isActive = category === cat.id;
@@ -434,6 +447,16 @@ export default function App() {
                 </motion.button>
               );
             })}
+          </div>
+            <button
+              type="button"
+              aria-label="Scroll categories right"
+              aria-controls="word-categories"
+              onClick={() => categoryScrollRef.current?.scrollBy({ left: 240, behavior: 'smooth' })}
+              className="hidden [@media(any-pointer:fine)]:inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-slate-200/80 bg-white/85 text-slate-600 hover:bg-white"
+            >
+              <ChevronRight className="h-4 w-4" aria-hidden="true" />
+            </button>
           </div>
         </LayoutGroup>
 
