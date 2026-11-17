@@ -532,7 +532,8 @@ function FlashcardItem({
                 onClick={onFlip}
                 aria-label={`Flip ${card.word} card to see meaning`}
                 data-testid={isPresent ? 'flip-btn' : undefined}
-                className="min-h-[48px] px-5 py-2.5 rounded-2xl font-semibold text-sm bg-slate-900 text-white hover:bg-slate-800 inline-flex items-center gap-2 transition-colors cursor-pointer whitespace-nowrap shrink-0 shadow-sm"
+                className="min-h-[48px] px-5 py-2.5 rounded-2xl border font-semibold text-sm text-slate-800 hover:brightness-95 inline-flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap shrink-0 shadow-sm"
+                style={{ backgroundColor: categoryMeta.softHex, borderColor: `${categoryMeta.accentHex}80` }}
               >
                 <RotateCw className="w-4 h-4 shrink-0" strokeWidth={2.2} />
                 <span>Flip Card</span>
@@ -798,7 +799,8 @@ function FlashcardItem({
                 onClick={onFlip}
                 aria-label={`Flip ${card.word} card back to front`}
                 data-testid={isPresent ? 'flip-btn-back' : undefined}
-                className="min-h-[48px] px-5 py-2.5 rounded-2xl font-semibold text-sm bg-slate-900 text-white hover:bg-slate-800 inline-flex items-center gap-2 transition-colors cursor-pointer whitespace-nowrap shrink-0 shadow-sm"
+                className="min-h-[48px] px-5 py-2.5 rounded-2xl border font-semibold text-sm text-slate-800 hover:brightness-95 inline-flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap shrink-0 shadow-sm"
+                style={{ backgroundColor: categoryMeta.softHex, borderColor: `${categoryMeta.accentHex}80` }}
               >
                 <RotateCw className="w-4 h-4 shrink-0" strokeWidth={2.2} />
                 <span>Show Emoji</span>

@@ -396,7 +396,7 @@ export default function App() {
           <div
             role="tablist"
             aria-label="Word categories"
-            className="w-full max-w-2xl flex flex-nowrap items-center gap-2 overflow-x-auto py-1 mb-4 sm:mb-7"
+            className="no-scrollbar w-full max-w-2xl flex flex-nowrap items-center gap-2 overflow-x-auto py-1 mb-4 sm:mb-7"
           >
             {CATEGORIES.map((cat) => {
               const isActive = category === cat.id;
@@ -411,7 +411,7 @@ export default function App() {
                   data-testid={`cat-tab-${cat.id}`}
                   className={`relative min-h-[40px] sm:min-h-[44px] px-3 sm:px-4 py-1.5 sm:py-2 rounded-2xl text-xs sm:text-sm font-semibold inline-flex items-center gap-1.5 sm:gap-2 transition-colors cursor-pointer whitespace-nowrap shrink-0 border ${
                     isActive
-                      ? 'text-white border-transparent'
+                      ? 'text-slate-800 border-transparent'
                       : 'bg-white/85 text-slate-600 border-slate-200/80 hover:bg-white hover:text-slate-900'
                   }`}
                 >
@@ -419,7 +419,8 @@ export default function App() {
                     <motion.span
                       layoutId="category-pill"
                       transition={{ type: 'spring', stiffness: 420, damping: 32 }}
-                      className="absolute inset-0 bg-slate-900 rounded-2xl shadow-sm"
+                      className="absolute inset-0 rounded-2xl border shadow-sm"
+                      style={{ backgroundColor: cat.softHex, borderColor: `${cat.accentHex}80` }}
                       aria-hidden="true"
                     />
                   )}
