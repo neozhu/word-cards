@@ -1,4 +1,5 @@
-import { motion } from 'motion/react';
+import { useState, type MouseEvent } from 'react';
+import { motion, useReducedMotion } from 'motion/react';
 import { CategoryId } from '../data/vocabData';
 
 interface BackdropSceneProps {
@@ -58,10 +59,70 @@ const CATEGORY_PALETTES: Partial<Record<CategoryId, ThemePalette>> & { all: Them
   },
 };
 
+function PlayfulCloud({ side }: { side: 'left' | 'right' }) {
+  const [position, setPosition] = useState({
+    left: side === 'left' ? 3 : 78,
+    top: 84,
+    tilt: 0,
+  });
+  const reduceMotion = useReducedMotion();
+
+  const moveCloud = (event: MouseEvent<HTMLButtonElement>) => {
+    const bounds = event.currentTarget.getBoundingClientRect();
+    const currentLeft = (bounds.left / window.innerWidth) * 100;
+    const currentTop = bounds.top;
+    const horizontal = event.detail === 0
+      ? (Math.random() < 0.5 ? -1 : 1)
+      : (event.clientX < bounds.left + bounds.width / 2 ? 1 : -1);
+    const vertical = event.detail === 0
+      ? (Math.random() < 0.5 ? -1 : 1)
+      : (event.clientY < bounds.top + bounds.height / 2 ? 1 : -1);
+    const minLeft = side === 'left' ? 3 : 58;
+    const maxLeft = side === 'left' ? 23 : 78;
+    const distance = 8 + Math.random() * 5;
+    let left = Math.max(minLeft, Math.min(maxLeft, currentLeft + horizontal * distance));
+    if (Math.abs(left - currentLeft) < 2) {
+      left = Math.max(minLeft, Math.min(maxLeft, currentLeft - horizontal * distance));
+    }
+    let top = Math.max(84, Math.min(128, currentTop + vertical * (12 + Math.random() * 15)));
+    if (Math.abs(top - currentTop) < 3) {
+      top = Math.max(84, Math.min(128, currentTop - vertical * 15));
+    }
+    const tilt = (left > currentLeft ? 1 : -1) * (4 + Math.random() * 4);
+    setPosition({ left, top, tilt });
+  };
+
+  return (
+    <motion.button
+      type="button"
+      aria-label={`Move ${side} cloud`}
+      initial={false}
+      animate={{ left: `${position.left}%`, top: position.top, rotate: [0, position.tilt, 0] }}
+      transition={{ duration: reduceMotion ? 0 : 0.65, ease: 'easeInOut' }}
+      onClick={moveCloud}
+      className="absolute pointer-events-auto flex min-h-11 w-16 sm:w-28 lg:w-36 items-center cursor-pointer rounded-full text-white/80 drop-shadow-[0_6px_18px_rgba(15,23,42,0.06)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500"
+    >
+      <motion.svg
+        viewBox="0 0 160 80"
+        aria-hidden="true"
+        animate={reduceMotion ? undefined : { y: [0, -5, 0] }}
+        transition={{ duration: side === 'left' ? 5 : 6, repeat: Infinity, ease: 'easeInOut' }}
+        className="w-full"
+      >
+        <path
+          d="M36 66h86a22 22 0 0 0 4-43.6A28 28 0 0 0 72 16a24 24 0 0 0-38 14A18 18 0 0 0 36 66Z"
+          fill="currentColor"
+        />
+      </motion.svg>
+    </motion.button>
+  );
+}
+
 export function BackdropScene({ category, cardTint }: BackdropSceneProps) {
   const palette = CATEGORY_PALETTES[category] ?? CATEGORY_PALETTES.all;
 
   return (
+    <>
     <div
       aria-hidden="true"
       className="fixed inset-0 overflow-hidden pointer-events-none z-0 select-none"
@@ -110,32 +171,6 @@ export function BackdropScene({ category, cardTint }: BackdropSceneProps) {
           fill="rgba(255, 255, 255, 0.82)"
         />
       </svg>
-
-      {/* Top-Left Translucent Paper Cloud */}
-      <motion.svg
-        viewBox="0 0 160 80"
-        animate={{ x: [0, 12, 0], y: [0, -4, 0] }}
-        transition={{ duration: 11, repeat: Infinity, ease: 'easeInOut' }}
-        className="hidden sm:block absolute top-20 left-10 lg:left-20 w-36 text-white/75 drop-shadow-[0_6px_18px_rgba(15,23,42,0.03)]"
-      >
-        <path
-          d="M36 66h86a22 22 0 0 0 4-43.6A28 28 0 0 0 72 16a24 24 0 0 0-38 14A18 18 0 0 0 36 66Z"
-          fill="currentColor"
-        />
-      </motion.svg>
-
-      {/* Top-Right Translucent Paper Cloud */}
-      <motion.svg
-        viewBox="0 0 160 80"
-        animate={{ x: [0, -14, 0], y: [0, 5, 0] }}
-        transition={{ duration: 13, repeat: Infinity, ease: 'easeInOut' }}
-        className="hidden sm:block absolute top-24 right-8 lg:right-24 w-32 lg:w-40 text-white/70 drop-shadow-[0_6px_18px_rgba(15,23,42,0.03)]"
-      >
-        <path
-          d="M36 66h86a22 22 0 0 0 4-43.6A28 28 0 0 0 72 16a24 24 0 0 0-38 14A18 18 0 0 0 36 66Z"
-          fill="currentColor"
-        />
-      </motion.svg>
 
       {/* Left Margin Playful Sparkle & Orbit Ring (Desktop / Tablet) */}
       <motion.div
@@ -204,5 +239,10 @@ export function BackdropScene({ category, cardTint }: BackdropSceneProps) {
         />
       </motion.svg>
     </div>
+    <div className="fixed inset-0 z-20 overflow-hidden pointer-events-none">
+      <PlayfulCloud side="left" />
+      <PlayfulCloud side="right" />
+    </div>
+    </>
   );
 }
