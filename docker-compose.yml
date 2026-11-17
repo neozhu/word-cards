@@ -1,0 +1,6 @@
+services:
+  word-cards:
+    image: ghcr.io/neozhu/word-cards:latest
+    ports:
+      - "8080:80"
+    restart: unless-stopped

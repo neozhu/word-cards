@@ -32,7 +32,9 @@ export function EmojiIcon({
 
   return (
     <img
-      src={src}
+      src={src.startsWith('/') && !src.startsWith('//')
+        ? `${import.meta.env.BASE_URL}${src.slice(1)}`
+        : src}
       alt={alt}
       aria-hidden={alt ? undefined : true}
       draggable={false}
