@@ -17,7 +17,7 @@ export function EmojiIcon({
 }: EmojiIconProps) {
   const [failed, setFailed] = useState(false);
 
-  if (failed) {
+  if (!src || failed) {
     return (
       <span
         className={`select-none inline-flex items-center justify-center ${fallbackClassName}`}

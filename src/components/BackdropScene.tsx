@@ -15,7 +15,7 @@ interface ThemePalette {
   accentC: string;
 }
 
-const CATEGORY_PALETTES: Record<CategoryId, ThemePalette> = {
+const CATEGORY_PALETTES: Partial<Record<CategoryId, ThemePalette>> & { all: ThemePalette } = {
   all: {
     topLeft: 'rgba(199, 210, 254, 0.55)', // soft indigo
     topRight: 'rgba(253, 230, 138, 0.5)', // sunlit butter
@@ -59,7 +59,7 @@ const CATEGORY_PALETTES: Record<CategoryId, ThemePalette> = {
 };
 
 export function BackdropScene({ category, cardTint }: BackdropSceneProps) {
-  const palette = CATEGORY_PALETTES[category];
+  const palette = CATEGORY_PALETTES[category] ?? CATEGORY_PALETTES.all;
 
   return (
     <div

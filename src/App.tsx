@@ -396,7 +396,7 @@ export default function App() {
           <div
             role="tablist"
             aria-label="Word categories"
-            className="w-full max-w-2xl flex flex-wrap items-center justify-center gap-2 mb-4 sm:mb-7"
+            className="w-full max-w-2xl flex flex-nowrap items-center gap-2 overflow-x-auto py-1 mb-4 sm:mb-7"
           >
             {CATEGORIES.map((cat) => {
               const isActive = category === cat.id;

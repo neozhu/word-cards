@@ -17,14 +17,28 @@ import {
 } from './deckLogic';
 
 test('filterCardsByCategory returns all cards for "all" and narrows for specific categories', () => {
-  assert.equal(filterCardsByCategory(VOCAB_CARDS, 'all').length, 40);
+  assert.equal(filterCardsByCategory(VOCAB_CARDS, 'all').length, 200);
   const animals = filterCardsByCategory(VOCAB_CARDS, 'animals');
-  assert.equal(animals.length, 10);
+  assert.equal(animals.length, 15);
   assert.ok(animals.every((c) => c.category === 'animals'));
 
   const vehicles = filterCardsByCategory(VOCAB_CARDS, 'vehicles');
-  assert.equal(vehicles.length, 10);
+  assert.equal(vehicles.length, 15);
   assert.ok(vehicles.every((c) => c.category === 'vehicles'));
+});
+
+test('new topics each provide 20 distinct cards for study and quizzes', () => {
+  for (const id of ['food', 'body', 'colors', 'numbers', 'family', 'objects', 'nature']) {
+    const category = CATEGORIES.find((item) => item.id === id);
+    assert.ok(category, `Missing category: ${id}`);
+    const cards = filterCardsByCategory(VOCAB_CARDS, category.id);
+    assert.equal(cards.length, 20, `Unexpected card count: ${id}`);
+    assert.equal(new Set(cards.map((card) => card.emoji)).size, cards.length);
+    const question = buildQuizQuestion(cards, VOCAB_CARDS, undefined, () => 0.42);
+    assert.ok(question);
+    assert.equal(question.options.length, 4);
+    assert.equal(new Set(question.options.map((card) => card.emoji)).size, 4);
+  }
 });
 
 test('getWrappedIndex wraps forward and backward safely', () => {
@@ -61,8 +75,8 @@ test('getMasteryProgress calculates exact percentage for category', () => {
   const fruits = filterCardsByCategory(VOCAB_CARDS, 'fruits');
   const stats = getMasteryProgress(fruits, ['fru-apple', 'fru-banana', 'ani-tiger']);
   assert.equal(stats.mastered, 2);
-  assert.equal(stats.total, 10);
-  assert.equal(stats.percent, 20);
+  assert.equal(stats.total, 15);
+  assert.equal(stats.percent, 13);
 });
 
 test('buildQuizQuestion creates 4 unique options including the target', () => {
@@ -76,27 +90,38 @@ test('buildQuizQuestion creates 4 unique options including the target', () => {
   assert.ok(ids.has(q.target.id));
 });
 
-test('all cards and categories are English-only with memory phrases and existing emoji PNG files', () => {
+test('all cards have unique IDs, English phrases, and an image or emoji', () => {
   const hanRegex = /\p{Script=Han}/u;
+  assert.equal(new Set(VOCAB_CARDS.map((card) => card.id)).size, VOCAB_CARDS.length);
+  assert.equal(new Set(VOCAB_CARDS.map((card) => card.word.toLowerCase())).size, VOCAB_CARDS.length);
   for (const cat of CATEGORIES) {
     assert.ok(!hanRegex.test(cat.label), `Unexpected Chinese in category ${cat.id}`);
-    const filePath = path.resolve(process.cwd(), cat.iconUrl.replace(/^\//, ''));
-    assert.ok(fs.existsSync(filePath), `Missing category icon: ${cat.iconUrl}`);
+    assert.ok(cat.emoji.trim(), `Missing category emoji: ${cat.id}`);
+    if (cat.iconUrl) {
+      const filePath = path.resolve(process.cwd(), cat.iconUrl.replace(/^\//, ''));
+      assert.ok(fs.existsSync(filePath), `Missing category icon: ${cat.iconUrl}`);
+    }
   }
   for (const card of VOCAB_CARDS) {
+    assert.ok(card.word.trim(), `Missing word on ${card.id}`);
+    assert.ok(card.phonetic.trim(), `Missing pronunciation on ${card.id}`);
     assert.ok(card.phrase.trim().length > 0, `Missing phrase on ${card.id}`);
+    assert.ok(card.sentence.trim(), `Missing sentence on ${card.id}`);
     assert.ok(!hanRegex.test(card.word), `Unexpected Chinese in word ${card.id}`);
     assert.ok(!hanRegex.test(card.phrase), `Unexpected Chinese in phrase ${card.id}`);
     assert.ok(!hanRegex.test(card.sentence), `Unexpected Chinese in sentence ${card.id}`);
-    const filePath = path.resolve(process.cwd(), card.iconUrl.replace(/^\//, ''));
-    assert.ok(fs.existsSync(filePath), `Missing card icon: ${card.iconUrl}`);
+    assert.ok(card.emoji.trim(), `Missing emoji on ${card.id}`);
+    if (card.iconUrl) {
+      const filePath = path.resolve(process.cwd(), card.iconUrl.replace(/^\//, ''));
+      assert.ok(fs.existsSync(filePath), `Missing card icon: ${card.iconUrl}`);
+    }
   }
 });
 
 test('filterStudyDeck narrows to unlearned cards and clearCategoryMasteredIds only clears active category', () => {
   const mastered = ['ani-tiger', 'ani-elephant', 'fru-apple'];
   const unlearnedAnimals = filterStudyDeck(VOCAB_CARDS, 'animals', mastered, true);
-  assert.equal(unlearnedAnimals.length, 8);
+  assert.equal(unlearnedAnimals.length, 13);
   assert.ok(!unlearnedAnimals.some((c) => c.id === 'ani-tiger' || c.id === 'ani-elephant'));
 
   const animalsPool = filterCardsByCategory(VOCAB_CARDS, 'animals');
