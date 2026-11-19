@@ -249,17 +249,6 @@ class SoundEngine {
     this.playMarimbaNote(ctx, 440.0, now + 0.05, 0.16, 0.11);
   }
 
-  /** Cascading cardstock riffle for deck shuffle */
-  public playShuffle(): void {
-    const ctx = this.ensureContext();
-    if (!ctx) return;
-    const now = ctx.currentTime;
-    const freqs = [392, 440, 523.25, 587.33, 659.25, 783.99];
-    freqs.forEach((f, idx) => {
-      this.playMarimbaNote(ctx, f, now + idx * 0.036, 0.09, 0.12);
-    });
-  }
-
   /** Gentle low woodblock thud for incorrect quiz guess (friendly, non-harsh) */
   public playGentleOops(): void {
     const ctx = this.ensureContext();

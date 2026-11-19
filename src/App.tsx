@@ -10,7 +10,6 @@ import {
   ChevronRight,
   Layers,
   RotateCcw,
-  Shuffle,
   Sparkles,
   Star,
   Trophy,
@@ -29,7 +28,6 @@ import {
   filterStudyDeck,
   getMasteryProgress,
   getWrappedIndex,
-  shuffleDeck,
   toggleMasteredId,
 } from './utils/deckLogic';
 import { soundEngine } from './utils/soundEngine';
@@ -50,7 +48,6 @@ export default function App() {
   const [deck, setDeck] = useState<VocabCard[]>(() => VOCAB_CARDS);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [direction, setDirection] = useState(1);
-  const [shuffleNonce, setShuffleNonce] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
   const [milestoneBanner, setMilestoneBanner] = useState<string | null>(null);
   const [isMuted, setIsMuted] = useState(() => soundEngine.isMuted());
@@ -207,16 +204,6 @@ export default function App() {
     });
   }, []);
 
-  const handleShuffle = () => {
-    if (deck.length <= 1) return;
-    soundEngine.playShuffle();
-    setDirection(1);
-    setIsFlipped(false);
-    setDeck((prevDeck) => shuffleDeck(prevDeck));
-    setCurrentIndex(0);
-    setShuffleNonce((n) => n + 1);
-  };
-
   const handleToggleMastered = useCallback((cardId: string) => {
     setMasteredIds((prev) => toggleMasteredId(prev, cardId));
   }, []);
@@ -249,7 +236,9 @@ export default function App() {
           target.tagName === 'INPUT' ||
           target.tagName === 'TEXTAREA');
 
-      if (e.key === 'ArrowRight') {
+        if (target?.closest('dialog[open]')) return;
+
+        if (e.key === 'ArrowRight') {
         e.preventDefault();
         handleNext();
       } else if (e.key === 'ArrowLeft') {
@@ -265,8 +254,6 @@ export default function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [mode, handleNext, handlePrev, handleFlip]);
 
-  const progressPercent =
-    deck.length > 0 ? Math.round(((safeIndex + 1) / deck.length) * 100) : 0;
   const unlearnedCount = Math.max(0, mastery.total - mastery.mastered);
 
   return (
@@ -538,7 +525,6 @@ export default function App() {
                     isFlipped={isFlipped}
                     isMastered={masteredIds.includes(currentCard.id)}
                     direction={direction}
-                    shuffleNonce={shuffleNonce}
                     onFlip={handleFlip}
                     onNext={handleNext}
                     onPrev={handlePrev}
@@ -547,110 +533,37 @@ export default function App() {
                     onPronounce={handlePronounce}
                   />
 
-                  {/* Deck Navigation & Progress Strip */}
-                  <div className="mt-9 sm:mt-11 w-full max-w-[440px] space-y-2.5 sm:space-y-3">
-                    {/* Thin Progress Track */}
-                    <div
-                      className="w-full h-1.5 bg-slate-200/80 rounded-full overflow-hidden"
-                      aria-hidden="true"
-                    >
-                      <motion.div
-                        className="h-full bg-indigo-600 rounded-full"
-                        initial={false}
-                        animate={{ width: `${progressPercent}%` }}
-                        transition={{ type: 'spring', stiffness: 280, damping: 28 }}
-                      />
-                    </div>
-
-                    {/* Navigation Buttons */}
-                    <div className="flex items-center justify-between gap-3">
-                      <motion.button
+                  {(mastery.mastered > 0 || onlyUnlearned) && (
+                    <div className="mt-9 sm:mt-11 flex flex-wrap items-center justify-center gap-2">
+                      <button
                         type="button"
-                        whileTap={{ scale: 0.92 }}
-                        onClick={handlePrev}
-                        aria-label="Previous card"
-                        data-testid="prev-card-btn"
-                        className="min-h-[48px] px-4 py-2.5 rounded-2xl bg-white border border-slate-200/90 text-slate-700 hover:bg-slate-50 hover:text-slate-900 font-semibold text-sm inline-flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer whitespace-nowrap shrink-0"
+                        onClick={handleToggleOnlyUnlearned}
+                        aria-pressed={onlyUnlearned}
+                        data-testid="to-learn-toggle"
+                        className={`px-2 py-0.5 rounded-lg border text-[11px] font-semibold transition-colors cursor-pointer ${
+                          onlyUnlearned
+                            ? 'bg-indigo-600 text-white border-indigo-600'
+                            : 'bg-white/85 text-slate-600 border-slate-200 hover:border-indigo-300 hover:text-indigo-700'
+                        }`}
                       >
-                        <ChevronLeft className="w-4 h-4" />
-                        <span>Prev</span>
-                      </motion.button>
-
-                      <div className="flex items-center gap-3">
-                        <motion.button
+                        {onlyUnlearned
+                          ? `Showing To Learn (${unlearnedCount})`
+                          : `To Learn (${unlearnedCount})`}
+                      </button>
+                      {mastery.mastered > 0 && (
+                        <button
                           type="button"
-                          whileTap={{ scale: 0.9 }}
-                          onClick={handleShuffle}
-                          aria-label="Shuffle cards"
-                          data-testid="shuffle-btn"
-                          className="min-w-[44px] min-h-[44px] rounded-2xl bg-white border border-slate-200/90 text-slate-600 hover:text-slate-900 hover:bg-slate-50 inline-flex items-center justify-center shadow-xs transition-colors cursor-pointer"
-                          title="Shuffle deck"
+                          onClick={handleResetCategoryStars}
+                          data-testid="reset-stars-btn"
+                          aria-label="Reset category stars"
+                          className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-lg text-[11px] font-medium text-slate-500 hover:text-slate-800 hover:bg-white/80 transition-colors cursor-pointer"
                         >
-                          <Shuffle className="w-4 h-4" />
-                        </motion.button>
-
-                        <span
-                          className="font-mono tabular-nums text-sm font-semibold text-slate-600 min-w-[64px] text-center"
-                          data-testid="deck-counter"
-                        >
-                          {safeIndex + 1} / {deck.length}
-                        </span>
-                      </div>
-
-                      <motion.button
-                        type="button"
-                        whileTap={{ scale: 0.92 }}
-                        onClick={handleNext}
-                        aria-label="Next card"
-                        data-testid="next-card-btn"
-                        className="min-h-[48px] px-4 py-2.5 rounded-2xl bg-white border border-slate-200/90 text-slate-700 hover:bg-slate-50 hover:text-slate-900 font-semibold text-sm inline-flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer whitespace-nowrap shrink-0"
-                      >
-                        <span>Next</span>
-                        <ChevronRight className="w-4 h-4" />
-                      </motion.button>
+                          <RotateCcw className="w-3 h-3" />
+                          <span>Reset</span>
+                        </button>
+                      )}
                     </div>
-
-                    {/* Retention Filter & Hints Row */}
-                    <div className="pt-1 flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500 px-1">
-                      <div className="flex items-center gap-2">
-                        <span>
-                          Stars: {mastery.mastered}/{mastery.total}
-                        </span>
-                        {(mastery.mastered > 0 || onlyUnlearned) && (
-                          <button
-                            type="button"
-                            onClick={handleToggleOnlyUnlearned}
-                            aria-pressed={onlyUnlearned}
-                            data-testid="to-learn-toggle"
-                            className={`px-2 py-0.5 rounded-lg border text-[11px] font-semibold transition-colors cursor-pointer ${
-                              onlyUnlearned
-                                ? 'bg-indigo-600 text-white border-indigo-600'
-                                : 'bg-white/85 text-slate-600 border-slate-200 hover:border-indigo-300 hover:text-indigo-700'
-                            }`}
-                          >
-                            {onlyUnlearned
-                              ? `Showing To Learn (${unlearnedCount})`
-                              : `To Learn (${unlearnedCount})`}
-                          </button>
-                        )}
-                        {mastery.mastered > 0 && (
-                          <button
-                            type="button"
-                            onClick={handleResetCategoryStars}
-                            data-testid="reset-stars-btn"
-                            aria-label="Reset category stars"
-                            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-lg text-[11px] font-medium text-slate-500 hover:text-slate-800 hover:bg-white/80 transition-colors cursor-pointer"
-                          >
-                            <RotateCcw className="w-3 h-3" />
-                            <span>Reset</span>
-                          </button>
-                        )}
-                      </div>
-                      <span className="hidden sm:inline">
-                        Tap card to flip · Swipe · ← →
-                      </span>
-                    </div>
-                  </div>
+                  )}
                 </>
               ) : (
                 /* Joyful All-Caught-Up Empty State when To Learn filter has 0 unstarred words left */

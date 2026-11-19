@@ -3,13 +3,24 @@ import react from '@vitejs/plugin-react';
 import fs from 'fs';
 import path from 'path';
 import {defineConfig, loadEnv} from 'vite';
+import {createSpeakAuthorization} from './server/speak-auth.mjs';
 
 export default defineConfig(({mode}) => {
-  const env = loadEnv(mode, process.cwd(), 'TTS_');
+  const env = loadEnv(mode, process.cwd(), ['TTS_', 'SPEAK_']);
   return {
     plugins: [
       react(),
       tailwindcss(),
+      {
+        name: 'speech-assessment-authorization',
+        configureServer(server) {
+          server.middlewares.use('/api/speak/authorize', createSpeakAuthorization({
+            appId: env.SPEAK_APP_ID,
+            appSecret: env.SPEAK_APP_SECRET,
+            clientIp: env.SPEAK_LOCAL_CLIENT_IP,
+          }));
+        },
+      },
       // Copies src/assets into dist/ so root-relative URLs like
       // "/src/assets/images/..." (e.g. generate_image output) still resolve
       // in production builds. Do not remove.

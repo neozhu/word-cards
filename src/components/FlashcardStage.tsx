@@ -10,12 +10,13 @@ import {
   useSpring,
   useTransform,
 } from 'motion/react';
-import { RotateCw, Sparkles, Star, Volume2 } from 'lucide-react';
+import { Mic, Sparkles, Star, Volume2 } from 'lucide-react';
 import { CATEGORIES, VocabCard } from '../data/vocabData';
 import { getSpellableLetters, stepSpellingProgress } from '../utils/deckLogic';
 import { soundEngine } from '../utils/soundEngine';
 import { EmojiIcon } from './EmojiIcon';
 import { BurstItem, ParticleBurst } from './ParticleBurst';
+import { SpeakDialog } from './SpeakDialog';
 
 interface FlashcardStageProps {
   card: VocabCard;
@@ -24,7 +25,6 @@ interface FlashcardStageProps {
   isFlipped: boolean;
   isMastered: boolean;
   direction: number; // 1 for next, -1 for prev
-  shuffleNonce?: number;
   onFlip: () => void;
   onNext: () => void;
   onPrev: () => void;
@@ -129,7 +129,7 @@ function FlashcardItem({
   const [emojiBounceKey, setEmojiBounceKey] = useState(0);
   const [pronouncing, setPronouncing] = useState(false);
   const [pronounceNotice, setPronounceNotice] = useState('');
-  const [isDragging, setIsDragging] = useState(false);
+  const [isSpeakOpen, setIsSpeakOpen] = useState(false);
   const [activeLetterIdx, setActiveLetterIdx] = useState<number | null>(null);
   const [spelledCount, setSpelledCount] = useState(0);
   const didDragRef = useRef(false);
@@ -160,8 +160,6 @@ function FlashcardItem({
   // Per-card drag tracking
   const dragX = useMotionValue(0);
   const dragRotate = useTransform(dragX, [-220, 0, 220], [-8, 0, 8]);
-  const nextCueOpacity = useTransform(dragX, [-120, -40, 0], [1, 0.4, 0]);
-  const prevCueOpacity = useTransform(dragX, [0, 40, 120], [0, 0.4, 1]);
 
   useEffect(() => {
     return dragX.on('change', (latest) => {
@@ -273,7 +271,6 @@ function FlashcardItem({
     _: MouseEvent | TouchEvent | PointerEvent,
     info: PanInfo
   ) => {
-    setIsDragging(false);
     window.setTimeout(() => {
       didDragRef.current = false;
     }, 90);
@@ -299,6 +296,17 @@ function FlashcardItem({
     ? 'z-30 pointer-events-none'
     : 'z-10 pointer-events-none';
 
+  const speakButton = (
+    <button
+      type="button"
+      onClick={() => setIsSpeakOpen(true)}
+      className="min-h-[48px] px-5 py-2.5 rounded-2xl border border-slate-200/80 bg-slate-50 text-slate-700 hover:bg-slate-100 font-semibold text-sm inline-flex items-center gap-2 cursor-pointer transition-colors shrink-0"
+    >
+      <Mic className="w-4 h-4 shrink-0" aria-hidden="true" />
+      <span>Speak</span>
+    </button>
+  );
+
   return (
     <motion.div
       ref={cardRef}
@@ -312,7 +320,6 @@ function FlashcardItem({
       dragElastic={0.42}
       onDragStart={() => {
         didDragRef.current = true;
-        setIsDragging(true);
       }}
       onDragEnd={handleDragEnd}
       onPointerMove={handlePointerMove}
@@ -325,24 +332,6 @@ function FlashcardItem({
       }}
       className={`col-start-1 row-start-1 w-full relative perspective-1400 cursor-grab active:cursor-grabbing ${zClass}`}
     >
-      {/* Swipe Directional Indicators (only visible during active drag) */}
-      {isDragging && isPresent && (
-        <>
-          <motion.div
-            style={{ opacity: prevCueOpacity }}
-            className="pointer-events-none absolute -left-3 top-1/2 -translate-y-1/2 z-30 bg-white border border-slate-200 shadow-md rounded-2xl px-3 py-1.5 text-xs font-semibold text-slate-700 whitespace-nowrap"
-          >
-            ← Prev
-          </motion.div>
-          <motion.div
-            style={{ opacity: nextCueOpacity }}
-            className="pointer-events-none absolute -right-3 top-1/2 -translate-y-1/2 z-30 bg-white border border-slate-200 shadow-md rounded-2xl px-3 py-1.5 text-xs font-semibold text-slate-700 whitespace-nowrap"
-          >
-            Next →
-          </motion.div>
-        </>
-      )}
-
       {/* 3D Flipper Shell with subtle physical lift */}
       <motion.div
         animate={{
@@ -474,7 +463,7 @@ function FlashcardItem({
             </p>
           </div>
 
-          {/* Bottom Action Row: Retained Pronounce Button + Flip Card Button */}
+          {/* Bottom Action Row */}
           <div className="space-y-2.5">
             <div className="flex items-center justify-center gap-3">
               <motion.button
@@ -522,18 +511,7 @@ function FlashcardItem({
                 </span>
               </motion.button>
 
-              <motion.button
-                type="button"
-                whileTap={{ scale: 0.94 }}
-                onClick={onFlip}
-                aria-label={`Flip ${card.word} card to see meaning`}
-                data-testid={isPresent ? 'flip-btn' : undefined}
-                className="min-h-[48px] px-5 py-2.5 rounded-2xl border font-semibold text-sm text-slate-800 hover:brightness-95 inline-flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap shrink-0 shadow-sm"
-                style={{ backgroundColor: categoryMeta.softHex, borderColor: `${categoryMeta.accentHex}80` }}
-              >
-                <RotateCw className="w-4 h-4 shrink-0" strokeWidth={2.2} />
-                <span>Flip Card</span>
-              </motion.button>
+              {speakButton}
             </div>
 
             <div className="h-5 flex items-center justify-center">
@@ -635,7 +613,7 @@ function FlashcardItem({
             {/* Interactive Sequential Spelling Game */}
             <div className="mt-3.5 flex flex-col items-center">
               <div className="mb-2 h-4 flex items-center gap-2 text-[11px] font-semibold">
-                {isSpellingComplete ? (
+                {isSpellingComplete && (
                   <motion.span
                     initial={{ scale: 0.85, opacity: 0 }}
                     animate={{ scale: 1, opacity: 1 }}
@@ -645,10 +623,6 @@ function FlashcardItem({
                     <Sparkles className="w-3 h-3" />
                     <span>Nice spelling! Star earned</span>
                   </motion.span>
-                ) : (
-                  <span className="text-slate-400">
-                    Tap letters in order · {spelledCount}/{spellableLetters.length}
-                  </span>
                 )}
               </div>
 
@@ -790,18 +764,7 @@ function FlashcardItem({
                 </span>
               </motion.button>
 
-              <motion.button
-                type="button"
-                whileTap={{ scale: 0.94 }}
-                onClick={onFlip}
-                aria-label={`Flip ${card.word} card back to front`}
-                data-testid={isPresent ? 'flip-btn-back' : undefined}
-                className="min-h-[48px] px-5 py-2.5 rounded-2xl border font-semibold text-sm text-slate-800 hover:brightness-95 inline-flex items-center gap-2 transition-all cursor-pointer whitespace-nowrap shrink-0 shadow-sm"
-                style={{ backgroundColor: categoryMeta.softHex, borderColor: `${categoryMeta.accentHex}80` }}
-              >
-                <RotateCw className="w-4 h-4 shrink-0" strokeWidth={2.2} />
-                <span>Show Emoji</span>
-              </motion.button>
+              {speakButton}
             </div>
             <div className="h-5 flex items-center justify-center">
               <AnimatePresence>
@@ -822,6 +785,12 @@ function FlashcardItem({
           </div>
         </section>
       </motion.div>
+      {isPresent && isSpeakOpen && (
+        <SpeakDialog
+          prompt={effectiveFlipped ? { kind: 'sentence', text: card.sentence } : { kind: 'word', text: card.word }}
+          onClose={() => setIsSpeakOpen(false)}
+        />
+      )}
     </motion.div>
   );
 }
@@ -833,7 +802,6 @@ export function FlashcardStage({
   isFlipped,
   isMastered,
   direction,
-  shuffleNonce = 0,
   onFlip,
   onNext,
   onPrev,
@@ -882,7 +850,7 @@ export function FlashcardStage({
       {/* Physical Fanned Deck Stack Behind Active Card */}
       {thirdCard && (
         <motion.div
-          key={`third-${thirdCard.id}-${shuffleNonce}`}
+          key={`third-${thirdCard.id}`}
           aria-hidden="true"
           initial={{ opacity: 0.6, scale: 0.935 }}
           animate={{ opacity: 1, scale: 1 }}
@@ -902,7 +870,7 @@ export function FlashcardStage({
 
       {nextCard && (
         <motion.div
-          key={`next-${nextCard.id}-${shuffleNonce}`}
+          key={`next-${nextCard.id}`}
           aria-hidden="true"
           initial={{ opacity: 0.7, scale: 0.95 }}
           animate={{ opacity: 1, scale: 1 }}
@@ -944,7 +912,7 @@ export function FlashcardStage({
       <div className="grid grid-cols-1 relative z-10 perspective-1400">
         <AnimatePresence initial={false} custom={direction}>
           <FlashcardItem
-            key={`${card.id}-${shuffleNonce}`}
+            key={card.id}
             card={card}
             isFlipped={isFlipped}
             isMastered={isMastered}

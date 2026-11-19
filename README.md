@@ -45,6 +45,27 @@ The Docker image also proxies speech requests using `TTS_API_URL` and
 `TTS_API_KEY` supplied to the container. GitHub Pages needs a separate
 server-side proxy for pronunciation.
 
+### Speak pronunciation practice
+
+The card front scores the word with Alibaba Cloud's child word model. The back
+scores the story sentence with its child sentence model. Scores below 60 prompt
+another try, 60–84 are good, and 85–100 are great. Each result can play its
+recording from Alibaba Cloud.
+
+For local development, download the [Alibaba Cloud JavaScript SDK](https://help.aliyun.com/zh/document_detail/2873513.html)
+from the speech assessment project in the console and place `engine.js` and any
+accompanying runtime files in `public/sdk/`. Add `SPEAK_APP_ID` and
+`SPEAK_APP_SECRET` to `.env.local`, plus `SPEAK_LOCAL_CLIENT_IP` with your public
+client IP when testing through localhost. Restart Vite. The browser needs
+HTTPS or localhost to use the microphone.
+
+For deployment, include the downloaded SDK when building the app. Run
+`node server/speak-auth.mjs` with Node.js 24 and the same server-side credential
+variables. In your HTTPS reverse proxy, route `POST /api/speak/authorize` to
+`http://127.0.0.1:4318` and overwrite `X-Real-IP` with the actual client IP.
+Apply your deployment's access controls and rate limits to this route. The
+SDK uses the short-lived authorization returned by this endpoint.
+
 ## Content
 
 Flashcard content lives in `src/data/vocabData.ts`.
