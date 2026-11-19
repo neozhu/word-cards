@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import {
   animate,
   AnimatePresence,
@@ -10,13 +10,13 @@ import {
   useSpring,
   useTransform,
 } from 'motion/react';
-import { Mic, Sparkles, Star, Volume2 } from 'lucide-react';
+import { Sparkles, Star, Volume2 } from 'lucide-react';
 import { CATEGORIES, VocabCard } from '../data/vocabData';
 import { getSpellableLetters, stepSpellingProgress } from '../utils/deckLogic';
 import { soundEngine } from '../utils/soundEngine';
 import { EmojiIcon } from './EmojiIcon';
 import { BurstItem, ParticleBurst } from './ParticleBurst';
-import { SpeakDialog } from './SpeakDialog';
+import { SpeakPractice, useSpeechPractice, type PracticeResult } from './SpeakPractice';
 
 interface FlashcardStageProps {
   card: VocabCard;
@@ -31,6 +31,7 @@ interface FlashcardStageProps {
   onToggleMastered: (cardId: string) => void;
   onEnsureMastered?: (cardId: string) => void;
   onPronounce?: (card: VocabCard, text?: string, queue?: boolean) => Promise<void>;
+  onStopPronounce?: () => void;
 }
 
 interface FlashcardItemProps {
@@ -45,6 +46,7 @@ interface FlashcardItemProps {
   onToggleMastered: (cardId: string) => void;
   onEnsureMastered?: (cardId: string) => void;
   onPronounce?: (card: VocabCard, text?: string, queue?: boolean) => Promise<void>;
+  onStopPronounce?: () => void;
   onSpawnBurst: (kind: 'star' | 'emoji') => void;
 }
 
@@ -122,6 +124,7 @@ function FlashcardItem({
   onToggleMastered,
   onEnsureMastered,
   onPronounce,
+  onStopPronounce,
   onSpawnBurst,
 }: FlashcardItemProps) {
   const isPresent = useIsPresent();
@@ -129,11 +132,38 @@ function FlashcardItem({
   const [emojiBounceKey, setEmojiBounceKey] = useState(0);
   const [pronouncing, setPronouncing] = useState(false);
   const [pronounceNotice, setPronounceNotice] = useState('');
-  const [isSpeakOpen, setIsSpeakOpen] = useState(false);
   const [activeLetterIdx, setActiveLetterIdx] = useState<number | null>(null);
   const [spelledCount, setSpelledCount] = useState(0);
+  const [speechGlow, setSpeechGlow] = useState(false);
   const didDragRef = useRef(false);
   const letterTimerRef = useRef<number | null>(null);
+  const speechGlowTimer = useRef<number | undefined>(undefined);
+  const pronounceRequest = useRef(0);
+
+  const stopListen = useCallback(() => {
+    pronounceRequest.current++;
+    onStopPronounce?.();
+    setPronouncing(false);
+    setPronounceNotice('');
+  }, [onStopPronounce]);
+
+  const handleSpeechResult = (result: PracticeResult) => {
+    if (result.grade === 'great') {
+      soundEngine.playStarSuccess();
+      onSpawnBurst('star');
+      window.clearTimeout(speechGlowTimer.current);
+      setSpeechGlow(true);
+      speechGlowTimer.current = window.setTimeout(() => setSpeechGlow(false), 2200);
+      if (!result.demo) onEnsureMastered?.(card.id);
+    } else if (result.grade === 'good') {
+      soundEngine.playSpeechGood();
+    } else {
+      soundEngine.playGentleOops();
+    }
+  };
+
+  const speech = useSpeechPractice(isPresent, isFlipped, stopListen, handleSpeechResult);
+  const needsPronunciationPractice = speech.state.kind === 'result' && speech.state.result.grade === 'retry';
 
   // Lock face state while exiting so flipped cards don't twist mid-air on dismiss
   useEffect(() => {
@@ -143,6 +173,12 @@ function FlashcardItem({
   }, [isFlipped, isPresent]);
 
   const effectiveFlipped = isPresent ? isFlipped : lockedFlipped;
+
+  useLayoutEffect(() => {
+    if (isPresent) stopListen();
+    window.clearTimeout(speechGlowTimer.current);
+    setSpeechGlow(false);
+  }, [isFlipped, isPresent, stopListen]);
 
   // Subtle 3D hover tilt
   const cardRef = useRef<HTMLDivElement>(null);
@@ -174,6 +210,7 @@ function FlashcardItem({
       if (letterTimerRef.current) {
         window.clearTimeout(letterTimerRef.current);
       }
+      window.clearTimeout(speechGlowTimer.current);
     };
   }, []);
 
@@ -185,14 +222,16 @@ function FlashcardItem({
 
   const handlePronounce = async (text: string, queue = false) => {
     if (!onPronounce) return;
+    speech.prepareListen();
+    const request = ++pronounceRequest.current;
     setPronouncing(true);
     setPronounceNotice('');
     try {
       await onPronounce(card, text, queue);
     } catch {
-      setPronounceNotice("Couldn't play audio. Please try again.");
+      if (request === pronounceRequest.current) setPronounceNotice("Couldn't play audio. Please try again.");
     } finally {
-      setPronouncing(false);
+      if (request === pronounceRequest.current) setPronouncing(false);
     }
   };
 
@@ -296,15 +335,32 @@ function FlashcardItem({
     ? 'z-30 pointer-events-none'
     : 'z-10 pointer-events-none';
 
-  const speakButton = (
-    <button
+  const renderListen = (text: string, label: string, testId: string) => (
+    <motion.button
       type="button"
-      onClick={() => setIsSpeakOpen(true)}
-      className="min-h-[48px] px-5 py-2.5 rounded-2xl border border-slate-200/80 bg-slate-50 text-slate-700 hover:bg-slate-100 font-semibold text-sm inline-flex items-center gap-2 cursor-pointer transition-colors shrink-0"
+      whileTap={{ scale: 0.94 }}
+      onClick={() => handlePronounce(text)}
+      aria-label={label}
+      data-testid={isPresent ? testId : undefined}
+      className={`inline-flex min-h-12 min-w-0 items-center justify-center gap-2 rounded-2xl border px-2.5 py-2 text-sm font-semibold transition-colors cursor-pointer disabled:cursor-default focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500 ${
+        pronouncing
+          ? 'border-indigo-600 bg-indigo-600 text-white'
+          : 'border-indigo-200/75 bg-indigo-100 text-indigo-700 enabled:hover:bg-indigo-200'
+      } ${needsPronunciationPractice && !pronouncing ? "relative after:pointer-events-none after:absolute after:-inset-1 after:rounded-[20px] after:ring-2 after:ring-indigo-400/65 after:content-[''] motion-safe:after:animate-pulse" : ''}`}
     >
-      <Mic className="w-4 h-4 shrink-0" aria-hidden="true" />
-      <span>Speak</span>
-    </button>
+      <Volume2 className="size-4 shrink-0" strokeWidth={2.3} aria-hidden="true" />
+      <span>Listen</span>
+      <span className="inline-flex h-3.5 w-4 items-end justify-center gap-0.5" aria-hidden="true">
+        {[0.6, 1, 0.75].map((height, index) => (
+          <motion.span
+            key={index}
+            animate={pronouncing ? { scaleY: [0.4, 1.15, 0.5, 1, 0.4] } : { scaleY: height }}
+            transition={pronouncing ? { duration: 0.55, repeat: Infinity, delay: index * 0.12 } : { duration: 0.2 }}
+            className={`h-full w-[2.5px] origin-bottom rounded-full ${pronouncing ? 'bg-white' : 'bg-indigo-500/70'}`}
+          />
+        ))}
+      </span>
+    </motion.button>
   );
 
   return (
@@ -350,10 +406,13 @@ function FlashcardItem({
         <section
           aria-label={isPresent ? `${card.word} flashcard front` : undefined}
           aria-hidden={!isPresent || effectiveFlipped}
+          inert={!isPresent || effectiveFlipped}
           data-testid={isPresent ? 'card-front' : undefined}
           onClick={handleCardSurfaceClick}
           className={`backface-hidden absolute inset-0 rounded-[32px] bg-white border cardstock-shadow-active p-5 sm:p-8 flex flex-col justify-between transition-colors duration-300 ${
-            isMastered
+            speechGlow
+              ? 'border-emerald-400 outline-3 outline-emerald-200/70'
+              : isMastered
               ? 'border-amber-300/85 bg-[radial-gradient(circle_at_top_right,rgba(253,230,138,0.28),transparent_46%)]'
               : 'border-slate-200/95'
           } ${
@@ -385,7 +444,9 @@ function FlashcardItem({
               aria-pressed={isMastered}
               data-testid={isPresent ? 'star-btn-front' : undefined}
               className={`min-w-[44px] min-h-[44px] inline-flex items-center justify-center rounded-2xl transition-colors cursor-pointer ${
-                isMastered
+                speechGlow
+                  ? 'bg-emerald-50 text-emerald-600 border border-emerald-300 shadow-[0_0_15px_#6ee7b780]'
+                  : isMastered
                   ? 'bg-amber-50 text-amber-500 border border-amber-200'
                   : 'bg-slate-50 text-slate-400 hover:text-amber-500 hover:bg-amber-50/60 border border-slate-200/70'
               }`}
@@ -452,7 +513,7 @@ function FlashcardItem({
             <h2 className="mt-4 font-display text-4xl sm:text-[2.75rem] font-extrabold tracking-tight text-slate-900 leading-tight">
               {card.word}
             </h2>
-            <p className="mt-0.5 text-sm font-medium text-slate-400 tracking-wide">
+            <p className={`mt-0.5 text-sm tracking-wide ${needsPronunciationPractice ? 'font-semibold text-indigo-700' : 'font-medium text-slate-400'}`}>
               {card.phonetic}
             </p>
             <p
@@ -463,85 +524,27 @@ function FlashcardItem({
             </p>
           </div>
 
-          {/* Bottom Action Row */}
-          <div className="space-y-2.5">
-            <div className="flex items-center justify-center gap-3">
-              <motion.button
-                type="button"
-                whileTap={{ scale: 0.94 }}
-                onClick={() => handlePronounce(card.word)}
-                aria-label={`Pronounce ${card.word}`}
-                data-testid={isPresent ? 'pronounce-btn' : undefined}
-                className={`min-h-[48px] px-5 py-2.5 rounded-2xl font-semibold text-sm inline-flex items-center gap-2.5 transition-all cursor-pointer whitespace-nowrap shrink-0 border ${
-                  pronouncing
-                    ? 'bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-500/20'
-                    : 'bg-indigo-50 text-indigo-700 border-indigo-200/80 hover:bg-indigo-100'
-                }`}
-              >
-                <Volume2 className="w-4 h-4 shrink-0" strokeWidth={2.3} />
-                <span>Listen</span>
-                <span
-                  className="inline-flex items-end gap-0.5 h-3.5 w-4 justify-center"
-                  aria-hidden="true"
-                >
-                  {[0, 1, 2].map((bar) => (
-                    <motion.span
-                      key={bar}
-                      animate={
-                        pronouncing
-                          ? {
-                              scaleY: [0.4, 1.15, 0.5, 1, 0.4],
-                            }
-                          : { scaleY: 0.45 }
-                      }
-                      transition={
-                        pronouncing
-                          ? {
-                              duration: 0.55,
-                              repeat: Infinity,
-                              delay: bar * 0.12,
-                            }
-                          : { duration: 0.2 }
-                      }
-                      className={`w-[2.5px] h-full rounded-full origin-bottom ${
-                        pronouncing ? 'bg-white' : 'bg-indigo-500/70'
-                      }`}
-                    />
-                  ))}
-                </span>
-              </motion.button>
-
-              {speakButton}
-            </div>
-
-            <div className="h-5 flex items-center justify-center">
-              <AnimatePresence>
-                {pronounceNotice && (
-                  <motion.p
-                    initial={{ opacity: 0, y: 3 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0 }}
-                    transition={{ duration: 0.18 }}
-                    className="text-xs font-medium text-indigo-600/80"
-                    data-testid={isPresent ? 'pronounce-notice' : undefined}
-                    role="status"
-                  >
-                    {pronounceNotice}
-                  </motion.p>
-                )}
-              </AnimatePresence>
-            </div>
-          </div>
+          <SpeakPractice
+            prompt={{ kind: 'word', text: card.word }}
+            word={card.word}
+            practice={speech}
+            notice={pronounceNotice}
+            noticeTestId={isPresent ? 'pronounce-notice' : undefined}
+            listen={renderListen(card.word, `Pronounce ${card.word}`, 'pronounce-btn')}
+          />
         </section>
 
         {/* ==================== BACK FACE ==================== */}
         <section
           aria-label={isPresent ? `${card.word} flashcard back` : undefined}
           aria-hidden={!isPresent || !effectiveFlipped}
+          inert={!isPresent || !effectiveFlipped}
           data-testid={isPresent ? 'card-back' : undefined}
           onClick={handleCardSurfaceClick}
           className={`backface-hidden rotate-y-180 absolute inset-0 rounded-[32px] bg-white border cardstock-shadow-active p-5 sm:p-8 flex flex-col justify-between transition-colors duration-300 ${
-            isMastered
+            speechGlow
+              ? 'border-emerald-400 outline-3 outline-emerald-200/70'
+              : isMastered
               ? 'border-amber-300/85 bg-[radial-gradient(circle_at_top_right,rgba(253,230,138,0.24),transparent_44%)]'
               : 'border-slate-200/95'
           } ${
@@ -569,7 +572,7 @@ function FlashcardItem({
                 <p className="font-display font-bold text-base text-slate-900 leading-none">
                   {card.word}
                 </p>
-                <p className="text-xs text-slate-500 mt-1">{card.phonetic}</p>
+                <p className={`mt-1 text-xs ${needsPronunciationPractice ? 'font-semibold text-indigo-700' : 'text-slate-500'}`}>{card.phonetic}</p>
               </div>
             </div>
 
@@ -585,7 +588,9 @@ function FlashcardItem({
               aria-pressed={isMastered}
               data-testid={isPresent ? 'star-btn-back' : undefined}
               className={`min-w-[44px] min-h-[44px] inline-flex items-center justify-center rounded-2xl transition-colors cursor-pointer ${
-                isMastered
+                speechGlow
+                  ? 'bg-emerald-50 text-emerald-600 border border-emerald-300 shadow-[0_0_15px_#6ee7b780]'
+                  : isMastered
                   ? 'bg-amber-50 text-amber-500 border border-amber-200'
                   : 'bg-slate-50 text-slate-400 hover:text-amber-500 hover:bg-amber-50/60 border border-slate-200/70'
               }`}
@@ -716,81 +721,17 @@ function FlashcardItem({
             </div>
           </div>
 
-          {/* Bottom Action Row */}
-          <div className="space-y-2.5">
-            <div className="flex items-center justify-center gap-3">
-              <motion.button
-                type="button"
-                whileTap={{ scale: 0.94 }}
-                onClick={() => handlePronounce(`${card.phrase}. ${card.sentence}`)}
-                aria-label={`Read phrase and sentence for ${card.word}`}
-                data-testid={isPresent ? 'pronounce-btn-back' : undefined}
-                className={`min-h-[48px] px-5 py-2.5 rounded-2xl font-semibold text-sm inline-flex items-center gap-2.5 transition-all cursor-pointer whitespace-nowrap shrink-0 border ${
-                  pronouncing
-                    ? 'bg-indigo-600 text-white border-indigo-600 shadow-md shadow-indigo-500/20'
-                    : 'bg-indigo-50 text-indigo-700 border-indigo-200/80 hover:bg-indigo-100'
-                }`}
-              >
-                <Volume2 className="w-4 h-4 shrink-0" strokeWidth={2.3} />
-                <span>Listen</span>
-                <span
-                  className="inline-flex items-end gap-0.5 h-3.5 w-4 justify-center"
-                  aria-hidden="true"
-                >
-                  {[0, 1, 2].map((bar) => (
-                    <motion.span
-                      key={bar}
-                      animate={
-                        pronouncing
-                          ? {
-                              scaleY: [0.4, 1.15, 0.5, 1, 0.4],
-                            }
-                          : { scaleY: 0.45 }
-                      }
-                      transition={
-                        pronouncing
-                          ? {
-                              duration: 0.55,
-                              repeat: Infinity,
-                              delay: bar * 0.12,
-                            }
-                          : { duration: 0.2 }
-                      }
-                      className={`w-[2.5px] h-full rounded-full origin-bottom ${
-                        pronouncing ? 'bg-white' : 'bg-indigo-500/70'
-                      }`}
-                    />
-                  ))}
-                </span>
-              </motion.button>
-
-              {speakButton}
-            </div>
-            <div className="h-5 flex items-center justify-center">
-              <AnimatePresence>
-                {pronounceNotice && (
-                  <motion.p
-                    initial={{ opacity: 0, y: 3 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0 }}
-                    transition={{ duration: 0.18 }}
-                    className="text-xs font-medium text-indigo-600/80"
-                    role="status"
-                  >
-                    {pronounceNotice}
-                  </motion.p>
-                )}
-              </AnimatePresence>
-            </div>
-          </div>
+          <SpeakPractice
+            prompt={{ kind: 'sentence', text: card.sentence }}
+            word={card.word}
+            practice={speech}
+            notice={pronounceNotice}
+            listen={renderListen(
+              `${card.phrase}. ${card.sentence}`, `Read phrase and sentence for ${card.word}`, 'pronounce-btn-back'
+            )}
+          />
         </section>
       </motion.div>
-      {isPresent && isSpeakOpen && (
-        <SpeakDialog
-          prompt={effectiveFlipped ? { kind: 'sentence', text: card.sentence } : { kind: 'word', text: card.word }}
-          onClose={() => setIsSpeakOpen(false)}
-        />
-      )}
     </motion.div>
   );
 }
@@ -808,6 +749,7 @@ export function FlashcardStage({
   onToggleMastered,
   onEnsureMastered,
   onPronounce,
+  onStopPronounce,
 }: FlashcardStageProps) {
   const [bursts, setBursts] = useState<BurstItem[]>([]);
   const burstCounter = useRef(0);
@@ -924,6 +866,7 @@ export function FlashcardStage({
             onToggleMastered={onToggleMastered}
             onEnsureMastered={onEnsureMastered}
             onPronounce={onPronounce}
+            onStopPronounce={onStopPronounce}
             onSpawnBurst={spawnBurst}
           />
         </AnimatePresence>

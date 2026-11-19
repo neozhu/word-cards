@@ -236,8 +236,6 @@ export default function App() {
           target.tagName === 'INPUT' ||
           target.tagName === 'TEXTAREA');
 
-        if (target?.closest('dialog[open]')) return;
-
         if (e.key === 'ArrowRight') {
         e.preventDefault();
         handleNext();
@@ -531,6 +529,7 @@ export default function App() {
                     onToggleMastered={handleToggleMastered}
                     onEnsureMastered={handleEnsureMastered}
                     onPronounce={handlePronounce}
+                    onStopPronounce={pronunciationPlayer.stop}
                   />
 
                   {(mastery.mastered > 0 || onlyUnlearned) && (

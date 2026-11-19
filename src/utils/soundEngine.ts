@@ -240,6 +240,14 @@ class SoundEngine {
     });
   }
 
+  public playSpeechGood(): void {
+    const ctx = this.ensureContext();
+    if (!ctx) return;
+    const now = ctx.currentTime;
+    this.playMarimbaNote(ctx, 523.25, now, 0.16, 0.11);
+    this.playMarimbaNote(ctx, 659.25, now + 0.07, 0.21, 0.12);
+  }
+
   /** Soft descending note when unstarring */
   public playUnstar(): void {
     const ctx = this.ensureContext();

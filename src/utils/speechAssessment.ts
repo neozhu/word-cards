@@ -7,13 +7,12 @@ interface AssessmentRequest {
   coreType: 'en.word_kid.score' | 'en.sent_kid.score';
   refText: string;
   rank: 100;
-  attachAudioUrl: 1;
+  attachAudioUrl: 0;
 }
 
 export interface Assessment {
   score: number;
   grade: 'retry' | 'good' | 'great';
-  recordingUrl: string | null;
 }
 
 interface Credentials {
@@ -23,18 +22,15 @@ interface Credentials {
 }
 
 interface SpeechEngine {
-  startRecord(parameters: AssessmentRequest & { warrantId: string }): void;
-  stopRecord(): void;
-  cancelRecord(): void;
+  wholeFileUpload(event: { target: { files: File[] } }, parameters: AssessmentRequest & { warrantId: string }): void;
   destroyEngine(): void;
 }
 
 type SpeechEngineConstructor = new (options: Credentials & {
   logIsOpen: false;
   engineFirstInitDone(): void;
-  engineBackResultDone(result: unknown): void;
+  engineBackResultDone(result: unknown, complete?: boolean): void;
   engineBackResultFail(): void;
-  micForbidCallback(): void;
   JSSDKNotSupport(): void;
   noNetwork(): void;
 }) => SpeechEngine;
@@ -50,7 +46,7 @@ export function getAssessmentRequest(prompt: SpeechPrompt): AssessmentRequest {
     coreType: prompt.kind === 'word' ? 'en.word_kid.score' : 'en.sent_kid.score',
     refText: prompt.text,
     rank: 100,
-    attachAudioUrl: 1,
+    attachAudioUrl: 0,
   };
 }
 
@@ -65,13 +61,13 @@ export function getAssessment(message: unknown): Assessment {
     throw new Error('No valid score was returned.');
   }
 
-  const appId = 'applicationId' in payload ? payload.applicationId : null;
-  const recordId = 'recordId' in payload ? payload.recordId : null;
-  const recordingUrl = typeof appId === 'string' && /^[\w-]+$/.test(appId)
-    && typeof recordId === 'string' && /^[\w-]+$/.test(recordId)
-    ? `https://files.cloud.ssapi.cn/${appId}/${recordId}.mp3`
-    : null;
-  return { score, grade: score < 60 ? 'retry' : score < 85 ? 'good' : 'great', recordingUrl };
+  return { score, grade: score < 65 ? 'retry' : score < 85 ? 'good' : 'great' };
+}
+
+export function getDemoAssessment(duration: number, random = Math.random): Assessment {
+  const [minimum, maximum] = duration < 650 ? [48, 61] : duration < 1150 ? [72, 82] : [88, 98];
+  const score = minimum + Math.floor(random() * (maximum - minimum + 1));
+  return { score, grade: score < 65 ? 'retry' : score < 85 ? 'good' : 'great' };
 }
 
 async function authorize(signal: AbortSignal): Promise<Credentials> {
@@ -94,23 +90,27 @@ async function authorize(signal: AbortSignal): Promise<Credentials> {
 let engineLoad: Promise<SpeechEngineConstructor> | undefined;
 
 function loadEngine(): Promise<SpeechEngineConstructor> {
-  if (window.EngineEvaluat) return Promise.resolve(window.EngineEvaluat);
   engineLoad ??= new Promise<SpeechEngineConstructor>((resolve, reject) => {
-    const script = document.createElement('script');
+    const frame = document.createElement('iframe');
+    frame.hidden = true;
+    // Some SDK versions request the microphone during initialization, even for file uploads.
+    frame.allow = "microphone 'none'";
     const fail = () => {
       window.clearTimeout(timeout);
-      script.remove();
+      frame.remove();
       reject(new Error('Speech scoring is unavailable.'));
     };
     const timeout = window.setTimeout(fail, 10000);
-    script.src = `${import.meta.env.BASE_URL}sdk/engine.js`;
-    script.onload = () => {
-      if (!window.EngineEvaluat) return fail();
+    const scriptURL = new URL(`${import.meta.env.BASE_URL}sdk/engine.js`, window.location.href);
+    frame.srcdoc = `<!doctype html><script src="${scriptURL.href}"></script>`;
+    frame.onload = () => {
+      const Engine = frame.contentWindow?.EngineEvaluat;
+      if (!Engine) return fail();
       window.clearTimeout(timeout);
-      resolve(window.EngineEvaluat);
+      resolve(Engine);
     };
-    script.onerror = fail;
-    document.head.appendChild(script);
+    frame.onerror = fail;
+    document.body.appendChild(frame);
   }).catch((error: unknown) => {
     engineLoad = undefined;
     throw error;
@@ -118,94 +118,71 @@ function loadEngine(): Promise<SpeechEngineConstructor> {
   return engineLoad;
 }
 
-export async function assessSpeech(
-  prompt: SpeechPrompt,
-  signal: AbortSignal,
-  callbacks: {
-    onRecording(stop: () => void): void;
-    onScoring(): void;
-    onResult(result: Assessment): void;
-    onError(message: string): void;
-  },
-) {
-  const [credentials, Engine] = await Promise.all([authorize(signal), loadEngine()]);
+async function toPcmFile(recording: Blob): Promise<File> {
+  const decoder = new OfflineAudioContext(1, 1, 16000);
+  const audio = await decoder.decodeAudioData(await recording.arrayBuffer());
+  const channels = Array.from({ length: audio.numberOfChannels }, (_, channel) => audio.getChannelData(channel));
+  const pcm = new DataView(new ArrayBuffer(audio.length * 2));
+  for (let index = 0; index < audio.length; index++) {
+    const sample = channels.reduce((sum, channel) => sum + channel[index], 0) / channels.length;
+    const clamped = Math.max(-1, Math.min(1, sample));
+    pcm.setInt16(index * 2, clamped * (clamped < 0 ? 32768 : 32767), true);
+  }
+  return new File([pcm.buffer], 'recording.pcm', { type: 'application/octet-stream' });
+}
+
+export async function assessSpeech(prompt: SpeechPrompt, recording: Blob, signal: AbortSignal): Promise<Assessment> {
+  const [credentials, Engine, file] = await Promise.all([authorize(signal), loadEngine(), toPcmFile(recording)]);
   signal.throwIfAborted();
 
-  let engine: SpeechEngine | undefined;
-  let phase: 'starting' | 'recording' | 'scoring' | 'finished' = 'starting';
-  let timer: number | undefined;
+  return new Promise<Assessment>((resolve, reject) => {
+    let engine: SpeechEngine | undefined;
+    let finished = false;
+    const timer = window.setTimeout(fail, 15000);
 
-  function cleanup() {
-    window.clearTimeout(timer);
-    signal.removeEventListener('abort', cancel);
-    const wasRecording = phase === 'recording';
-    phase = 'finished';
-    try {
-      if (wasRecording) engine?.cancelRecord();
-    } finally {
+    function finish() {
+      if (finished) return false;
+      finished = true;
+      window.clearTimeout(timer);
+      signal.removeEventListener('abort', fail);
       engine?.destroyEngine();
+      return true;
     }
-  }
 
-  function cancel() {
-    if (phase !== 'finished') cleanup();
-  }
+    function fail() {
+      if (finish()) reject(new Error('Could not score this recording.'));
+    }
 
-  function fail(message = 'Could not score this recording. Try again.') {
-    if (phase === 'finished') return;
-    cleanup();
-    callbacks.onError(message);
-  }
-
-  function stop() {
-    if (phase !== 'recording') return;
-    phase = 'scoring';
-    window.clearTimeout(timer);
-    timer = window.setTimeout(() => fail(), 15000);
-    callbacks.onScoring();
+    signal.addEventListener('abort', fail, { once: true });
     try {
-      engine?.stopRecord();
+      engine = new Engine({
+        ...credentials,
+        logIsOpen: false,
+        engineFirstInitDone: () => queueMicrotask(() => {
+          if (finished) return;
+          try {
+            engine?.wholeFileUpload({ target: { files: [file] } }, {
+              ...getAssessmentRequest(prompt), warrantId: credentials.warrantId,
+            });
+          } catch {
+            fail();
+          }
+        }),
+        engineBackResultDone: (message, complete) => {
+          if (finished || complete === false) return;
+          try {
+            const result = getAssessment(message);
+            if (finish()) resolve(result);
+          } catch {
+            fail();
+          }
+        },
+        engineBackResultFail: () => queueMicrotask(fail),
+        JSSDKNotSupport: () => queueMicrotask(fail),
+        noNetwork: () => queueMicrotask(fail),
+      });
     } catch {
       fail();
     }
-  }
-
-  signal.addEventListener('abort', cancel, { once: true });
-  timer = window.setTimeout(() => fail('Could not start the microphone. Try again.'), 30000);
-  try {
-    engine = new Engine({
-      ...credentials,
-      logIsOpen: false,
-      engineFirstInitDone: () => queueMicrotask(() => {
-        if (phase !== 'starting') return;
-        phase = 'recording';
-        window.clearTimeout(timer);
-        timer = window.setTimeout(stop, prompt.kind === 'word' ? 6000 : 15000);
-        callbacks.onRecording(stop);
-        try {
-          engine?.startRecord({ ...getAssessmentRequest(prompt), warrantId: credentials.warrantId });
-        } catch {
-          fail();
-        }
-      }),
-      engineBackResultDone: (message) => {
-        if (phase !== 'scoring') return;
-        let result: Assessment;
-        try {
-          result = getAssessment(message);
-        } catch {
-          fail();
-          return;
-        }
-        cleanup();
-        callbacks.onResult(result);
-      },
-      engineBackResultFail: () => fail(),
-      micForbidCallback: () => fail('Allow microphone access to record.'),
-      JSSDKNotSupport: () => fail('Recording is unavailable in this browser.'),
-      noNetwork: () => fail('Could not connect to speech scoring.'),
-    });
-  } catch {
-    fail('Could not start speech scoring. Try again.');
-  }
+  });
 }

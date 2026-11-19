@@ -48,9 +48,10 @@ server-side proxy for pronunciation.
 ### Speak pronunciation practice
 
 The card front scores the word with Alibaba Cloud's child word model. The back
-scores the story sentence with its child sentence model. Scores below 60 prompt
-another try, 60–84 are good, and 85–100 are great. Each result can play its
-recording from Alibaba Cloud.
+scores the story sentence with its child sentence model. Scores below 65 prompt
+another try, 65–84 are good, and 85–100 are great. Recordings play locally.
+Flipping or changing cards clears the current practice session. If recording
+or cloud scoring is unavailable, the result is marked Demo.
 
 For local development, download the [Alibaba Cloud JavaScript SDK](https://help.aliyun.com/zh/document_detail/2873513.html)
 from the speech assessment project in the console and place `engine.js` and any
