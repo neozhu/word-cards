@@ -185,7 +185,7 @@ export function SpeakPractice({ prompt, word, practice, notice, noticeTestId, li
     : isChecking ? 'bg-amber-100 text-amber-900'
     : high ? 'bg-emerald-700 text-white hover:bg-emerald-800'
     : low ? 'bg-amber-100 text-amber-900 hover:bg-amber-200'
-    : 'bg-slate-950 text-white hover:bg-slate-800';
+    : 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/20 hover:bg-indigo-700 active:bg-indigo-800';
 
   return (
     <div role="region" aria-label="Speech practice" className="mx-auto w-full max-w-[330px] space-y-1.5">

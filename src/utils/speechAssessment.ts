@@ -22,7 +22,10 @@ interface Credentials {
 }
 
 interface SpeechEngine {
-  wholeFileUpload(event: { target: { files: File[] } }, parameters: AssessmentRequest & { warrantId: string }): void;
+  configAudio(audio: { sampleRate: number; channel: number; sampleBytes: number; audioType: 'wav' }): void;
+  start(parameters: AssessmentRequest & { warrantId: string }): void;
+  feed(data: string): void;
+  stop(): void;
   destroyEngine(): void;
 }
 
@@ -118,21 +121,37 @@ function loadEngine(): Promise<SpeechEngineConstructor> {
   return engineLoad;
 }
 
-async function toPcmFile(recording: Blob): Promise<File> {
-  const decoder = new OfflineAudioContext(1, 1, 16000);
+const evaluationSampleRate = 16000;
+
+async function toWave(recording: Blob): Promise<Uint8Array> {
+  const decoder = new OfflineAudioContext(1, 1, evaluationSampleRate);
   const audio = await decoder.decodeAudioData(await recording.arrayBuffer());
   const channels = Array.from({ length: audio.numberOfChannels }, (_, channel) => audio.getChannelData(channel));
-  const pcm = new DataView(new ArrayBuffer(audio.length * 2));
+  const dataLength = audio.length * 2;
+  const pcm = new DataView(new ArrayBuffer(44 + dataLength));
+  pcm.setUint32(0, 0x52494646); // RIFF
+  pcm.setUint32(4, 36 + dataLength, true);
+  pcm.setUint32(8, 0x57415645); // WAVE
+  pcm.setUint32(12, 0x666d7420); // fmt chunk
+  pcm.setUint32(16, 16, true);
+  pcm.setUint16(20, 1, true);
+  pcm.setUint16(22, 1, true);
+  pcm.setUint32(24, evaluationSampleRate, true);
+  pcm.setUint32(28, evaluationSampleRate * 2, true);
+  pcm.setUint16(32, 2, true);
+  pcm.setUint16(34, 16, true);
+  pcm.setUint32(36, 0x64617461); // data chunk
+  pcm.setUint32(40, dataLength, true);
   for (let index = 0; index < audio.length; index++) {
     const sample = channels.reduce((sum, channel) => sum + channel[index], 0) / channels.length;
     const clamped = Math.max(-1, Math.min(1, sample));
-    pcm.setInt16(index * 2, clamped * (clamped < 0 ? 32768 : 32767), true);
+    pcm.setInt16(44 + index * 2, clamped * (clamped < 0 ? 32768 : 32767), true);
   }
-  return new File([pcm.buffer], 'recording.pcm', { type: 'application/octet-stream' });
+  return new Uint8Array(pcm.buffer);
 }
 
 export async function assessSpeech(prompt: SpeechPrompt, recording: Blob, signal: AbortSignal): Promise<Assessment> {
-  const [credentials, Engine, file] = await Promise.all([authorize(signal), loadEngine(), toPcmFile(recording)]);
+  const [credentials, Engine, wave] = await Promise.all([authorize(signal), loadEngine(), toWave(recording)]);
   signal.throwIfAborted();
 
   return new Promise<Assessment>((resolve, reject) => {
@@ -159,11 +178,16 @@ export async function assessSpeech(prompt: SpeechPrompt, recording: Blob, signal
         ...credentials,
         logIsOpen: false,
         engineFirstInitDone: () => queueMicrotask(() => {
-          if (finished) return;
+          if (finished || !engine) return;
           try {
-            engine?.wholeFileUpload({ target: { files: [file] } }, {
+            engine.configAudio({ sampleRate: evaluationSampleRate, channel: 1, sampleBytes: 2, audioType: 'wav' });
+            engine.start({
               ...getAssessmentRequest(prompt), warrantId: credentials.warrantId,
             });
+            for (let offset = 0; offset < wave.length; offset += 8192) {
+              engine.feed(btoa(String.fromCharCode(...wave.subarray(offset, offset + 8192))));
+            }
+            engine.stop();
           } catch {
             fail();
           }
