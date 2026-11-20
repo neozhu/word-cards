@@ -83,6 +83,39 @@ test('sanitizes x-real-ip, enforces cross-site and credential checks, and report
     assert.equal(proxied.status, 200);
     assert.equal(seenIp, '198.51.100.7');
 
+    // Prefers CF-Connecting-IP over private/Docker bridge forwarded headers
+    const cfRes = await fetch(`${base}/api/speak/authorize`, {
+      method: 'POST',
+      headers: {
+        'cf-connecting-ip': '203.0.113.88',
+        'x-forwarded-for': '172.18.0.1',
+        'x-real-ip': '172.18.0.1',
+      },
+    });
+    assert.equal(cfRes.status, 200);
+    assert.equal(seenIp, '203.0.113.88');
+
+    // Picks public client IP from X-Forwarded-For ahead of private proxy hops
+    const xffRes = await fetch(`${base}/api/speak/authorize`, {
+      method: 'POST',
+      headers: {
+        'x-forwarded-for': '10.0.0.5, 198.51.100.99, 172.18.0.1',
+        'x-real-ip': '172.18.0.1',
+      },
+    });
+    assert.equal(xffRes.status, 200);
+    assert.equal(seenIp, '198.51.100.99');
+
+    // Falls back to first valid private IP if all headers/peer are private
+    const privateFallback = await fetch(`${base}/api/speak/authorize`, {
+      method: 'POST',
+      headers: {
+        'x-real-ip': '192.168.1.50',
+      },
+    });
+    assert.equal(privateFallback.status, 200);
+    assert.equal(seenIp, '192.168.1.50');
+
     upstreamOk = false;
     const failed = await fetch(`${base}/api/speak/authorize`, {
       method: 'POST',

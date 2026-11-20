@@ -30,6 +30,8 @@ interface SpeechEngine {
 }
 
 type SpeechEngineConstructor = new (options: Credentials & {
+  coreType: AssessmentRequest['coreType'];
+  autoConnect: false;
   logIsOpen: false;
   engineFirstInitDone(): void;
   engineBackResultDone(result: unknown, complete?: boolean): void;
@@ -279,17 +281,20 @@ function runEngine(
       if (finish()) reject(new Error('Could not score this recording.'));
     }
 
+    const assessmentRequest = getAssessmentRequest(prompt);
     signal.addEventListener('abort', fail, { once: true });
     try {
       engine = new Engine({
         ...credentials,
+        coreType: assessmentRequest.coreType,
+        autoConnect: false,
         logIsOpen: false,
         engineFirstInitDone: () => queueMicrotask(() => {
           if (finished || !engine) return;
           try {
             engine.configAudio({ sampleRate: evaluationSampleRate, channel: 1, sampleBytes: 2, audioType: 'wav' });
             engine.start({
-              ...getAssessmentRequest(prompt), warrantId: credentials.warrantId,
+              ...assessmentRequest, warrantId: credentials.warrantId,
             });
             for (let offset = 0; offset < wave.length; offset += 8192) {
               engine.feed(btoa(String.fromCharCode(...wave.subarray(offset, offset + 8192))));

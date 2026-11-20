@@ -65,12 +65,14 @@ accompanying runtime files in `public/sdk/`. Add `SPEAK_APP_ID` and
 client IP when testing through localhost. Restart Vite. The browser needs
 HTTPS or localhost to use the microphone.
 
-For deployment, include the downloaded SDK when building the app. Run
-`node server/speak-auth.mjs` with Node.js 24 and the same server-side credential
-variables. In your HTTPS reverse proxy, route `POST /api/speak/authorize` to
-`http://127.0.0.1:4318` and overwrite `X-Real-IP` with the actual client IP.
-Apply your deployment's access controls and rate limits to this route. The
-SDK uses the short-lived authorization returned by this endpoint.
+For deployment with Docker, the container automatically starts
+`server/speak-auth.mjs` and proxies `POST /api/speak/authorize` through Nginx.
+Set `SPEAK_APP_ID` and `SPEAK_APP_SECRET` in the container environment (and
+ensure your HTTPS reverse proxy forwards the real client IP via `X-Real-IP`,
+`X-Forwarded-For`, or `CF-Connecting-IP`). Apply your deployment's access
+controls and rate limits to this route. If deploying static files without the
+Docker image, run `node server/speak-auth.mjs` separately and route
+`POST /api/speak/authorize` to `http://127.0.0.1:4318`.
 
 ## Content
 
@@ -104,10 +106,11 @@ manually rebuild the same commit, use **Pull and redeploy** in Portainer to pick
 up the new image. The application is available on port `8080` by default; change
 the host port in `docker-compose.yml` if needed.
 
-Set `TTS_API_URL` and `TTS_API_KEY` in the deployment environment or a Compose
-`.env` file. The URL must be reachable from the container; for a service on the
-Docker host, the Compose default is `http://host.docker.internal:48731`. Recreate
-the container after changing these values.
+Set `TTS_API_URL`, `TTS_API_KEY`, `SPEAK_APP_ID`, and `SPEAK_APP_SECRET` in the
+deployment environment or a Compose `.env` file. The TTS URL must be reachable
+from the container; for a service on the Docker host, the Compose default is
+`http://host.docker.internal:48731`. Recreate the container after changing these
+values.
 
 ## AI Disclosure
 

@@ -1,6 +1,66 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 import { isIP } from 'node:net';
+import { resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
+
+function normalizeIp(value) {
+  if (typeof value !== 'string') return '';
+  const cleaned = value.trim().replace(/^::ffff:/i, '');
+  return isIP(cleaned) ? cleaned : '';
+}
+
+function isPrivateOrLocalIp(ip) {
+  const version = isIP(ip);
+  if (version === 4) {
+    const [a, b] = ip.split('.').map(Number);
+    return (
+      a === 0 ||
+      a === 10 ||
+      a === 127 ||
+      (a === 100 && b >= 64 && b <= 127) ||
+      (a === 169 && b === 254) ||
+      (a === 172 && b >= 16 && b <= 31) ||
+      (a === 192 && b === 168)
+    );
+  }
+  if (version === 6) {
+    const lower = ip.toLowerCase();
+    return (
+      lower === '::1' ||
+      lower === '::' ||
+      /^f[cd][0-9a-f]{2}:/.test(lower) ||
+      /^fe[89ab][0-9a-f]:/.test(lower)
+    );
+  }
+  return true;
+}
+
+function resolveClientIp(request, trustProxy) {
+  const peerIp = normalizeIp(request.socket?.remoteAddress);
+  if (!trustProxy) {
+    return peerIp;
+  }
+
+  const candidates = [];
+  const pushHeader = (headerValue, splitList = false) => {
+    if (!headerValue) return;
+    const raw = Array.isArray(headerValue) ? headerValue.join(',') : headerValue;
+    const parts = splitList ? raw.split(',') : [raw];
+    for (const part of parts) {
+      const ip = normalizeIp(part);
+      if (ip) candidates.push(ip);
+    }
+  };
+
+  pushHeader(request.headers['cf-connecting-ip']);
+  pushHeader(request.headers['true-client-ip']);
+  pushHeader(request.headers['x-forwarded-for'], true);
+  pushHeader(request.headers['x-real-ip']);
+  if (peerIp) candidates.push(peerIp);
+
+  return candidates.find((ip) => !isPrivateOrLocalIp(ip)) ?? candidates[0] ?? '';
+}
 
 export function createSpeakAuthorization({ appId, appSecret, clientIp, trustProxy = false, authorize = fetch }) {
   return async (request, response) => {
@@ -17,12 +77,7 @@ export function createSpeakAuthorization({ appId, appSecret, clientIp, trustProx
     }
     if (!appId || !appSecret) return send(503, { error: 'Speech scoring is not configured.' });
 
-    const peerIp = request.socket.remoteAddress?.replace(/^::ffff:/, '');
-    const rawForwarded = request.headers['x-real-ip'];
-    const forwardedIp = typeof rawForwarded === 'string'
-      ? rawForwarded.trim().replace(/^::ffff:/, '')
-      : undefined;
-    const ip = clientIp || (trustProxy && forwardedIp ? forwardedIp : peerIp);
+    const ip = normalizeIp(clientIp) || resolveClientIp(request, trustProxy);
     if (!ip || !isIP(ip)) return send(400, { error: 'Client address is unavailable.' });
 
     const userId = randomUUID();
@@ -57,10 +112,16 @@ export function createSpeakAuthorization({ appId, appSecret, clientIp, trustProx
   };
 }
 
-if (import.meta.main) {
+const isMain = Boolean(
+  import.meta.main ||
+  (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url)
+);
+
+if (isMain) {
   const authorize = createSpeakAuthorization({
     appId: process.env.SPEAK_APP_ID,
     appSecret: process.env.SPEAK_APP_SECRET,
+    clientIp: process.env.SPEAK_LOCAL_CLIENT_IP || undefined,
     trustProxy: true,
   });
   createServer((request, response) => {
