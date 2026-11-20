@@ -6,7 +6,12 @@ Swipe through the deck like real cards—simple UI, big type, and low distractio
 
 [Try WordPop](https://wordpop.blazorserver.com/)
 
-<img src="docs/wordpop-mobile.png" alt="WordPop flashcards on mobile" width="390">
+<p>
+  <img src="docs/wordpop-mobile.png" alt="WordPop card front on mobile" width="200">
+  <img src="docs/wordpop-mobile-back.png" alt="WordPop card back with spelling tiles on mobile" width="200">
+  <img src="docs/wordpop-mobile-category.png" alt="WordPop Fruits category with starred word on mobile" width="200">
+  <img src="docs/wordpop-mobile-quiz.png" alt="WordPop quiz mode on mobile" width="200">
+</p>
 
 Swipe left/right to move through cards.
 
