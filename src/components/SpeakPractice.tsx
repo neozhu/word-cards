@@ -1,8 +1,14 @@
-import { useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { motion, useReducedMotion } from 'motion/react';
 import { Mic, Play, RotateCcw, Sparkles, Square, Star } from 'lucide-react';
 import { recordSpeech } from '../utils/localSpeechRecording';
-import { assessSpeech, getDemoAssessment, type Assessment, type SpeechPrompt } from '../utils/speechAssessment';
+import {
+  assessSpeech,
+  getDemoAssessment,
+  warmSpeechAssessment,
+  type Assessment,
+  type SpeechPrompt,
+} from '../utils/speechAssessment';
 import { soundEngine } from '../utils/soundEngine';
 
 export interface PracticeResult extends Assessment {
@@ -11,9 +17,11 @@ export interface PracticeResult extends Assessment {
 }
 
 type PracticeState =
-  | { kind: 'idle' | 'checking' }
+  | { kind: 'idle' | 'preparing' | 'checking' }
   | { kind: 'recording'; prompt: SpeechPrompt }
   | { kind: 'result'; result: PracticeResult };
+
+type LevelListener = (level: number | null) => void;
 
 const grades = {
   retry: { label: 'Try again!', stars: 1, strip: 'border-amber-200 bg-amber-50 text-amber-900', badge: 'bg-amber-700' },
@@ -21,42 +29,74 @@ const grades = {
   great: { label: 'Awesome!', stars: 3, strip: 'border-emerald-200 bg-emerald-50 text-emerald-900', badge: 'bg-emerald-700' },
 };
 
-export function useSpeechPractice(isPresent: boolean, isFlipped: boolean, stopListen: () => void, onResult: (result: PracticeResult) => void) {
+export function useSpeechPractice(
+  isPresent: boolean,
+  isFlipped: boolean,
+  stopListen: () => void,
+  onResult: (result: PracticeResult) => void
+) {
   const [state, setState] = useState<PracticeState>({ kind: 'idle' });
-  const [level, setLevel] = useState<number | null>(null);
   const [playing, setPlaying] = useState(false);
   const [playbackFailed, setPlaybackFailed] = useState(false);
+  const [micNotice, setMicNotice] = useState('');
   const lastResult = useRef<PracticeResult | null>(null);
   const attempt = useRef<AbortController | null>(null);
   const stopRecording = useRef<(() => void) | null>(null);
   const releaseVoice = useRef<(() => void) | null>(null);
+  const levelRef = useRef<number | null>(null);
+  const levelListeners = useRef(new Set<LevelListener>());
+  const stateKindRef = useRef<PracticeState['kind']>('idle');
+  stateKindRef.current = state.kind;
+
+  const setLevel = useCallback((next: number | null) => {
+    levelRef.current = next;
+    levelListeners.current.forEach((listener) => listener(next));
+  }, []);
+
+  const getLevel = useCallback(() => levelRef.current, []);
+
+  const subscribeLevel = useCallback((listener: LevelListener) => {
+    levelListeners.current.add(listener);
+    return () => {
+      levelListeners.current.delete(listener);
+    };
+  }, []);
 
   useLayoutEffect(() => {
     lastResult.current = null;
+    attempt.current = null;
+    stopRecording.current = null;
+    setLevel(null);
     setPlaying(false);
     setPlaybackFailed(false);
+    setMicNotice('');
     setState({ kind: 'idle' });
     return () => {
       attempt.current?.abort();
+      attempt.current = null;
       releaseVoice.current?.();
       releaseVoice.current = null;
       stopRecording.current = null;
     };
-  }, [isPresent, isFlipped]);
+  }, [isPresent, isFlipped, setLevel]);
 
-  const stopVoice = () => {
+  const stopVoice = useCallback(() => {
     releaseVoice.current?.();
     releaseVoice.current = null;
     setPlaying(false);
-  };
+  }, []);
 
-  const prepareListen = () => {
+  const prepareListen = useCallback(() => {
     stopVoice();
-    if (state.kind !== 'recording') return;
+    setMicNotice('');
+    const kind = stateKindRef.current;
+    if (kind !== 'preparing' && kind !== 'recording' && kind !== 'checking') return;
     attempt.current?.abort();
+    attempt.current = null;
     stopRecording.current = null;
+    setLevel(null);
     setState(lastResult.current ? { kind: 'result', result: lastResult.current } : { kind: 'idle' });
-  };
+  }, [setLevel, stopVoice]);
 
   const start = async (prompt: SpeechPrompt) => {
     stopListen();
@@ -67,22 +107,46 @@ export function useSpeechPractice(isPresent: boolean, isFlipped: boolean, stopLi
     const { signal } = controller;
 
     setPlaybackFailed(false);
+    setMicNotice('');
     setLevel(null);
-    setState({ kind: 'recording', prompt });
+    setState({ kind: 'preparing' });
     soundEngine.playTabClick();
+    warmSpeechAssessment();
+
     const recording = recordSpeech({
       limit: prompt.kind === 'word' ? 3600 : 10000,
       signal,
+      onStarted: () => {
+        if (!signal.aborted) {
+          setState({ kind: 'recording', prompt });
+        }
+      },
       onChecking: () => {
         stopRecording.current = null;
-        setState({ kind: 'checking' });
+        if (!signal.aborted) {
+          setLevel(null);
+          setState({ kind: 'checking' });
+        }
       },
       onLevel: setLevel,
     });
     stopRecording.current = recording.stop;
 
     const capture = await recording.result;
-    if (!capture || signal.aborted) return;
+    if (signal.aborted) return;
+    if (!capture) {
+      setLevel(null);
+      setState(lastResult.current ? { kind: 'result', result: lastResult.current } : { kind: 'idle' });
+      return;
+    }
+
+    if (capture.unavailableReason === 'permission-denied') {
+      setLevel(null);
+      setMicNotice('Microphone access is blocked. Allow mic permission to practice.');
+      setState(lastResult.current ? { kind: 'result', result: lastResult.current } : { kind: 'idle' });
+      return;
+    }
+
     let assessment: Assessment | undefined;
     if (capture.audio) {
       try {
@@ -145,13 +209,35 @@ export function useSpeechPractice(isPresent: boolean, isFlipped: boolean, stopLi
   };
 
   return {
-    state, level, playing, playbackFailed, prepareListen, start, toggleVoice,
+    state,
+    playing,
+    playbackFailed,
+    micNotice,
+    subscribeLevel,
+    getLevel,
+    prepareListen,
+    start,
+    toggleVoice,
     stop: () => stopRecording.current?.(),
   };
 }
 
-function VoiceBars({ level = null }: { level?: number | null }) {
+function VoiceBars({
+  subscribeLevel,
+  getLevel,
+}: {
+  subscribeLevel?: (listener: LevelListener) => () => void;
+  getLevel?: () => number | null;
+}) {
   const reducedMotion = useReducedMotion();
+  const [level, setLevel] = useState<number | null>(() => getLevel?.() ?? null);
+
+  useEffect(() => {
+    if (!subscribeLevel) return;
+    setLevel(getLevel?.() ?? null);
+    return subscribeLevel(setLevel);
+  }, [subscribeLevel, getLevel]);
+
   return (
     <span aria-hidden="true" className="inline-flex h-4 w-3.5 shrink-0 items-center justify-center gap-0.5">
       {[0.65, 1, 0.78].map((height, index) => (
@@ -173,16 +259,18 @@ export function SpeakPractice({ prompt, word, practice, notice, noticeTestId, li
   noticeTestId?: string;
   listen: ReactNode;
 }) {
-  const { state, level, playing, playbackFailed } = practice;
+  const { state, playing, playbackFailed, micNotice, subscribeLevel, getLevel } = practice;
   const reducedMotion = useReducedMotion();
   const result = state.kind === 'result' ? state.result : null;
   const grade = result ? grades[result.grade] : null;
+  const isPreparing = state.kind === 'preparing';
   const isRecording = state.kind === 'recording';
   const isChecking = state.kind === 'checking';
   const high = result?.grade === 'great';
   const low = result?.grade === 'retry';
+  const activeNotice = notice || micNotice;
   const actionColor = isRecording ? 'bg-rose-600 text-white hover:bg-rose-700'
-    : isChecking ? 'bg-amber-100 text-amber-900'
+    : isPreparing || isChecking ? 'bg-amber-100 text-amber-900'
     : high ? 'bg-emerald-700 text-white hover:bg-emerald-800'
     : low ? 'bg-amber-100 text-amber-900 hover:bg-amber-200'
     : 'bg-indigo-600 text-white shadow-sm shadow-indigo-600/20 hover:bg-indigo-700 active:bg-indigo-800';
@@ -194,7 +282,7 @@ export function SpeakPractice({ prompt, word, practice, notice, noticeTestId, li
         <motion.button
           type="button"
           disabled={isChecking}
-          onClick={isRecording ? practice.stop : () => void practice.start(prompt)}
+          onClick={isRecording || isPreparing ? practice.stop : () => void practice.start(prompt)}
           className={`inline-flex min-h-12 min-w-0 items-center justify-center gap-2 rounded-2xl px-2.5 py-2 text-sm font-semibold cursor-pointer disabled:cursor-default focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-500 ${actionColor}`}
           animate={reducedMotion ? undefined : {
             scale: high ? [1, 1.06, 1] : 1,
@@ -203,7 +291,8 @@ export function SpeakPractice({ prompt, word, practice, notice, noticeTestId, li
           }}
           transition={{ scale: { duration: 0.32 }, x: { duration: 0.38 }, boxShadow: { duration: 1.35, repeat: isRecording ? Infinity : 0 } }}
         >
-          {isRecording ? <><Square className="size-3.5 fill-current" aria-hidden="true" /> Stop <VoiceBars level={level} /></>
+          {isRecording ? <><Square className="size-3.5 fill-current" aria-hidden="true" /> Stop <VoiceBars subscribeLevel={subscribeLevel} getLevel={getLevel} /></>
+            : isPreparing ? <><Mic className="size-4" aria-hidden="true" /> Starting...</>
             : isChecking ? 'Checking'
             : high ? <><Sparkles className="size-4" aria-hidden="true" /> Perfect!</>
             : low ? <><RotateCcw className="size-4" aria-hidden="true" /> Try Again</>
@@ -212,6 +301,11 @@ export function SpeakPractice({ prompt, word, practice, notice, noticeTestId, li
       </div>
 
       <div className="flex min-h-10 items-center justify-center">
+        {isPreparing && (
+          <p role="status" className="text-center text-xs font-semibold text-amber-800">
+            Allow microphone access...
+          </p>
+        )}
         {isRecording && (
           <p role="status" className="text-center text-xs font-semibold text-rose-700">
             {state.prompt.kind === 'word' ? `Say “${word}” out loud...` : 'Read the sentence aloud...'}
@@ -237,12 +331,15 @@ export function SpeakPractice({ prompt, word, practice, notice, noticeTestId, li
             </button>
           </div>
         )}
-        {state.kind === 'idle' && (notice ? (
-          <p role="status" data-testid={noticeTestId} className="text-center text-xs font-medium text-indigo-700">{notice}</p>
+        {state.kind === 'idle' && (activeNotice ? (
+          <p role="status" data-testid={noticeTestId} className="text-center text-xs font-medium text-indigo-700">{activeNotice}</p>
         ) : (
           <p className="text-center text-xs text-slate-500">{prompt.kind === 'word' ? 'Tap card to flip' : 'Tap card to flip back'}</p>
         ))}
       </div>
+      {state.kind !== 'idle' && activeNotice && (
+        <p role="status" data-testid={noticeTestId} className="text-center text-xs font-medium text-indigo-700">{activeNotice}</p>
+      )}
       {playbackFailed && <p role="status" className="text-center text-xs text-amber-800">Could not play your recording.</p>}
     </div>
   );

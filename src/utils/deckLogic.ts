@@ -183,10 +183,60 @@ export function buildQuizQuestion(
   const target = candidates[Math.floor(rng() * candidates.length)];
 
   const distractorPool = (pool.length >= 4 ? pool : allCards).filter(
-    (c) => c.id !== target.id
+    (c) => c.id !== target.id && c.emoji !== target.emoji
   );
   const distractors = shuffleDeck(distractorPool, rng).slice(0, 3);
   const options = shuffleDeck([target, ...distractors], rng);
 
   return { target, options };
+}
+
+/**
+ * Advances or rewinds the active study deck, pruning mastered cards when `onlyUnlearned` is active.
+ */
+export function advanceStudyDeck(
+  deck: readonly VocabCard[],
+  currentIndex: number,
+  delta: 1 | -1,
+  masteredIds: readonly string[],
+  onlyUnlearned: boolean
+): { deck: VocabCard[]; nextIndex: number } {
+  if (deck.length === 0) {
+    return { deck: [], nextIndex: 0 };
+  }
+
+  const safeIndex = Math.max(0, Math.min(currentIndex, deck.length - 1));
+  if (!onlyUnlearned) {
+    return {
+      deck: [...deck],
+      nextIndex: getWrappedIndex(safeIndex, delta, deck.length),
+    };
+  }
+
+  const masteredSet = new Set(masteredIds);
+  const remaining = deck.filter((c) => !masteredSet.has(c.id));
+  if (remaining.length === 0) {
+    return { deck: [], nextIndex: 0 };
+  }
+
+  const currentCard = deck[safeIndex];
+  if (masteredSet.has(currentCard.id)) {
+    const removedBefore = deck
+      .slice(0, safeIndex)
+      .filter((c) => masteredSet.has(c.id)).length;
+    const baseIndex = safeIndex - removedBefore;
+    return {
+      deck: remaining,
+      nextIndex:
+        delta > 0
+          ? getWrappedIndex(baseIndex, 0, remaining.length)
+          : getWrappedIndex(baseIndex, -1, remaining.length),
+    };
+  }
+
+  const newIdx = remaining.findIndex((c) => c.id === currentCard.id);
+  return {
+    deck: remaining,
+    nextIndex: getWrappedIndex(newIdx < 0 ? 0 : newIdx, delta, remaining.length),
+  };
 }

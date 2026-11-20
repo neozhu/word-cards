@@ -26,9 +26,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
+          cache: 'npm'
       - id: pages
         uses: actions/configure-pages@v5
-      - run: npm install --no-audit --no-fund
+      - run: npm ci --no-audit --no-fund
+      - run: npm run lint
+      - run: npm test
       - name: Build
         run: npm run build -- --base="${BASE_PATH}/"
         env:

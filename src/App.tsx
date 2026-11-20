@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { AnimatePresence, LayoutGroup, motion } from 'motion/react';
 import {
   ChevronLeft,
@@ -23,6 +23,7 @@ import {
   VocabCard,
 } from './data/vocabData';
 import {
+  advanceStudyDeck,
   clearCategoryMasteredIds,
   filterCardsByCategory,
   filterStudyDeck,
@@ -40,6 +41,7 @@ import { QuizStage } from './components/QuizStage';
 type AppMode = 'cards' | 'quiz';
 
 const STORAGE_KEY_MASTERED = 'wordpop_mastered_v1';
+const VALID_CARD_IDS = new Set(VOCAB_CARDS.map((card) => card.id));
 
 export default function App() {
   const [mode, setMode] = useState<AppMode>('cards');
@@ -51,6 +53,7 @@ export default function App() {
   const [isFlipped, setIsFlipped] = useState(false);
   const [milestoneBanner, setMilestoneBanner] = useState<string | null>(null);
   const [isMuted, setIsMuted] = useState(() => soundEngine.isMuted());
+  const [scrollEdge, setScrollEdge] = useState({ left: false, right: false });
   const pronunciationPlayer = useMemo(() => createPronunciationPlayer(), []);
   const categoryScrollRef = useRef<HTMLDivElement>(null);
   const [masteredIds, setMasteredIds] = useState<string[]>(() => {
@@ -58,8 +61,15 @@ export default function App() {
     try {
       const raw = window.localStorage.getItem(STORAGE_KEY_MASTERED);
       if (!raw) return [];
-      const parsed = JSON.parse(raw);
-      return Array.isArray(parsed) ? parsed : [];
+      const parsed: unknown = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return [];
+      return Array.from(
+        new Set(
+          parsed.filter(
+            (id): id is string => typeof id === 'string' && VALID_CARD_IDS.has(id)
+          )
+        )
+      );
     } catch {
       return [];
     }
@@ -177,24 +187,43 @@ export default function App() {
     if (nextMode === mode) return;
     soundEngine.playTabClick();
     setMilestoneBanner(null);
+    if (nextMode === 'cards' && onlyUnlearned) {
+      const filtered = filterStudyDeck(VOCAB_CARDS, category, masteredIds, true);
+      setDeck(filtered);
+      setCurrentIndex((idx) =>
+        filtered.length === 0 ? 0 : Math.min(idx, filtered.length - 1)
+      );
+      setIsFlipped(false);
+    }
     setMode(nextMode);
   };
 
+  const stepDeck = useCallback(
+    (delta: 1 | -1) => {
+      if (deck.length === 0) return;
+      soundEngine.playSwipe(delta > 0 ? 'next' : 'prev');
+      const { deck: nextDeck, nextIndex } = advanceStudyDeck(
+        deck,
+        currentIndex,
+        delta,
+        masteredIds,
+        onlyUnlearned
+      );
+      setDirection(delta);
+      setIsFlipped(false);
+      setDeck(nextDeck);
+      setCurrentIndex(nextIndex);
+    },
+    [deck, currentIndex, masteredIds, onlyUnlearned]
+  );
+
   const handleNext = useCallback(() => {
-    if (deck.length === 0) return;
-    soundEngine.playSwipe('next');
-    setDirection(1);
-    setIsFlipped(false);
-    setCurrentIndex((idx) => getWrappedIndex(idx, 1, deck.length));
-  }, [deck.length]);
+    stepDeck(1);
+  }, [stepDeck]);
 
   const handlePrev = useCallback(() => {
-    if (deck.length === 0) return;
-    soundEngine.playSwipe('prev');
-    setDirection(-1);
-    setIsFlipped(false);
-    setCurrentIndex((idx) => getWrappedIndex(idx, -1, deck.length));
-  }, [deck.length]);
+    stepDeck(-1);
+  }, [stepDeck]);
 
   const handleFlip = useCallback(() => {
     setIsFlipped((prev) => {
@@ -224,24 +253,88 @@ export default function App() {
     queue ? pronunciationPlayer.enqueue(text) : pronunciationPlayer.play(text)
   ), [pronunciationPlayer]);
 
+  // Track category bar horizontal overflow for scroll buttons & edge fade
+  const updateCategoryScrollEdges = useCallback(() => {
+    const el = categoryScrollRef.current;
+    if (!el) return;
+    const left = el.scrollLeft > 4;
+    const right = el.scrollLeft + el.clientWidth < el.scrollWidth - 4;
+    setScrollEdge((prev) =>
+      prev.left === left && prev.right === right ? prev : { left, right }
+    );
+  }, []);
+
+  useEffect(() => {
+    const el = categoryScrollRef.current;
+    if (!el) return;
+    updateCategoryScrollEdges();
+    el.addEventListener('scroll', updateCategoryScrollEdges, { passive: true });
+    let observer: ResizeObserver | undefined;
+    if (typeof ResizeObserver !== 'undefined') {
+      observer = new ResizeObserver(updateCategoryScrollEdges);
+      observer.observe(el);
+    }
+    window.addEventListener('resize', updateCategoryScrollEdges);
+    return () => {
+      el.removeEventListener('scroll', updateCategoryScrollEdges);
+      observer?.disconnect();
+      window.removeEventListener('resize', updateCategoryScrollEdges);
+    };
+  }, [updateCategoryScrollEdges]);
+
+  const handleCategoryKeyDown = (e: ReactKeyboardEvent<HTMLDivElement>) => {
+    const currentIdx = CATEGORIES.findIndex((c) => c.id === category);
+    let targetIdx = -1;
+    if (e.key === 'ArrowRight') {
+      targetIdx = (currentIdx + 1) % CATEGORIES.length;
+    } else if (e.key === 'ArrowLeft') {
+      targetIdx = (currentIdx - 1 + CATEGORIES.length) % CATEGORIES.length;
+    } else if (e.key === 'Home') {
+      targetIdx = 0;
+    } else if (e.key === 'End') {
+      targetIdx = CATEGORIES.length - 1;
+    }
+    if (targetIdx >= 0) {
+      e.preventDefault();
+      const targetCategory = CATEGORIES[targetIdx];
+      handleCategoryChange(targetCategory.id);
+      const tabButtons = categoryScrollRef.current?.querySelectorAll<HTMLButtonElement>('[role="tab"]');
+      const nextTab = tabButtons?.[targetIdx];
+      nextTab?.focus();
+      nextTab?.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+    }
+  };
+
   // Keyboard shortcuts for desktop exploration
   useEffect(() => {
     if (mode !== 'cards') return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement | null;
-      const isInteractiveElement =
+      const isInTabList = Boolean(target?.closest('[role="tablist"]'));
+      const isTextOrFormControl = Boolean(
         target &&
-        (target.tagName === 'BUTTON' ||
-          target.tagName === 'INPUT' ||
-          target.tagName === 'TEXTAREA');
+          (target.tagName === 'INPUT' ||
+            target.tagName === 'TEXTAREA' ||
+            target.tagName === 'SELECT' ||
+            target.isContentEditable)
+      );
+      const isInteractiveElement = Boolean(
+        target &&
+          (target.tagName === 'BUTTON' ||
+            target.tagName === 'A' ||
+            isTextOrFormControl)
+      );
 
-        if (e.key === 'ArrowRight') {
+      if (e.key === 'ArrowRight' && !isInTabList && !isTextOrFormControl) {
         e.preventDefault();
         handleNext();
-      } else if (e.key === 'ArrowLeft') {
+      } else if (e.key === 'ArrowLeft' && !isInTabList && !isTextOrFormControl) {
         e.preventDefault();
         handlePrev();
+      } else if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && !isInTabList && !isTextOrFormControl) {
+        e.preventDefault();
+        handleFlip();
       } else if (e.key === ' ' && !isInteractiveElement) {
         e.preventDefault();
         handleFlip();
@@ -253,9 +346,14 @@ export default function App() {
   }, [mode, handleNext, handlePrev, handleFlip]);
 
   const unlearnedCount = Math.max(0, mastery.total - mastery.mastered);
+  const tabMaskLeft = scrollEdge.left ? 'transparent 0px, black 20px' : 'black 0px';
+  const tabMaskRight = scrollEdge.right ? 'black calc(100% - 20px), transparent 100%' : 'black 100%';
+  const categoryMaskImage = scrollEdge.left || scrollEdge.right
+    ? `linear-gradient(to right, ${tabMaskLeft}, ${tabMaskRight})`
+    : undefined;
 
   return (
-    <div className="relative min-h-screen studio-canvas flex flex-col text-slate-900 overflow-x-clip">
+    <div className="relative min-h-dvh studio-canvas flex flex-col text-slate-900 overflow-x-clip">
       <BackdropScene
         category={category}
         cardTint={mode === 'cards' ? currentCard?.stageTint : undefined}
@@ -384,8 +482,9 @@ export default function App() {
               type="button"
               aria-label="Scroll categories left"
               aria-controls="word-categories"
+              disabled={!scrollEdge.left}
               onClick={() => categoryScrollRef.current?.scrollBy({ left: -240, behavior: 'smooth' })}
-              className="hidden [@media(any-pointer:fine)]:inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-slate-200/80 bg-white/85 text-slate-600 hover:bg-white"
+              className="hidden [@media(any-pointer:fine)]:inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-slate-200/80 bg-white/85 text-slate-600 hover:bg-white cursor-pointer disabled:opacity-35 disabled:cursor-default disabled:hover:bg-white/85 transition-opacity"
             >
               <ChevronLeft className="h-4 w-4" aria-hidden="true" />
             </button>
@@ -394,6 +493,8 @@ export default function App() {
             id="word-categories"
             role="tablist"
             aria-label="Word categories"
+            onKeyDown={handleCategoryKeyDown}
+            style={categoryMaskImage ? { maskImage: categoryMaskImage, WebkitMaskImage: categoryMaskImage } : undefined}
             className="no-scrollbar min-w-0 flex-1 flex flex-nowrap items-center gap-2 overflow-x-auto py-1"
           >
             {CATEGORIES.map((cat) => {
@@ -403,9 +504,13 @@ export default function App() {
                   key={cat.id}
                   type="button"
                   role="tab"
+                  tabIndex={isActive ? 0 : -1}
                   aria-selected={isActive}
                   whileTap={{ scale: 0.95 }}
-                  onClick={() => handleCategoryChange(cat.id)}
+                  onClick={(e) => {
+                    handleCategoryChange(cat.id);
+                    e.currentTarget.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+                  }}
                   data-testid={`cat-tab-${cat.id}`}
                   className={`relative min-h-[40px] sm:min-h-[44px] px-3 sm:px-4 py-1.5 sm:py-2 rounded-2xl text-xs sm:text-sm font-semibold inline-flex items-center gap-1.5 sm:gap-2 transition-colors cursor-pointer whitespace-nowrap shrink-0 border ${
                     isActive
@@ -437,8 +542,9 @@ export default function App() {
               type="button"
               aria-label="Scroll categories right"
               aria-controls="word-categories"
+              disabled={!scrollEdge.right}
               onClick={() => categoryScrollRef.current?.scrollBy({ left: 240, behavior: 'smooth' })}
-              className="hidden [@media(any-pointer:fine)]:inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-slate-200/80 bg-white/85 text-slate-600 hover:bg-white"
+              className="hidden [@media(any-pointer:fine)]:inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-slate-200/80 bg-white/85 text-slate-600 hover:bg-white cursor-pointer disabled:opacity-35 disabled:cursor-default disabled:hover:bg-white/85 transition-opacity"
             >
               <ChevronRight className="h-4 w-4" aria-hidden="true" />
             </button>
@@ -619,6 +725,7 @@ export default function App() {
                 allCards={VOCAB_CARDS}
                 onMasterWord={handleEnsureMastered}
                 onPronounce={handlePronounce}
+                onStopPronounce={pronunciationPlayer.stop}
               />
             </motion.div>
           )}

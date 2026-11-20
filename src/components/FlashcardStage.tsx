@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   animate,
   AnimatePresence,
@@ -7,6 +7,7 @@ import {
   PanInfo,
   useIsPresent,
   useMotionValue,
+  useReducedMotion,
   useSpring,
   useTransform,
 } from 'motion/react';
@@ -128,6 +129,7 @@ function FlashcardItem({
   onSpawnBurst,
 }: FlashcardItemProps) {
   const isPresent = useIsPresent();
+  const reducedMotion = useReducedMotion();
   const [lockedFlipped, setLockedFlipped] = useState(isFlipped);
   const [emojiBounceKey, setEmojiBounceKey] = useState(0);
   const [pronouncing, setPronouncing] = useState(false);
@@ -136,6 +138,7 @@ function FlashcardItem({
   const [spelledCount, setSpelledCount] = useState(0);
   const [speechGlow, setSpeechGlow] = useState(false);
   const didDragRef = useRef(false);
+  const dragResetTimerRef = useRef<number | undefined>(undefined);
   const letterTimerRef = useRef<number | null>(null);
   const speechGlowTimer = useRef<number | undefined>(undefined);
   const pronounceRequest = useRef(0);
@@ -210,6 +213,7 @@ function FlashcardItem({
       if (letterTimerRef.current) {
         window.clearTimeout(letterTimerRef.current);
       }
+      window.clearTimeout(dragResetTimerRef.current);
       window.clearTimeout(speechGlowTimer.current);
     };
   }, []);
@@ -245,27 +249,37 @@ function FlashcardItem({
     onToggleMastered(card.id);
   };
 
-  const spellableLetters = getSpellableLetters(card.word);
-  let runningLetterPos = -1;
-  const spellTokens = card.word.split('').map((char) => {
-    if (char === ' ') {
-      return { isSpace: true as const, char, letterPos: -1 };
-    }
-    runningLetterPos += 1;
-    return {
-      isSpace: false as const,
-      char: char.toUpperCase(),
-      letterPos: runningLetterPos,
-    };
-  });
+  const spellableLetters = useMemo(() => getSpellableLetters(card.word), [card.word]);
+  const spellTokens = useMemo(() => {
+    let runningLetterPos = -1;
+    return card.word.split('').map((char) => {
+      if (char === ' ') {
+        return { isSpace: true as const, char, letterPos: -1 };
+      }
+      runningLetterPos += 1;
+      return {
+        isSpace: false as const,
+        char: char.toUpperCase(),
+        letterPos: runningLetterPos,
+      };
+    });
+  }, [card.word]);
   const isSpellingComplete =
     spellableLetters.length > 0 && spelledCount >= spellableLetters.length;
 
   const handleLetterClick = (letterPos: number) => {
     const result = stepSpellingProgress(spellableLetters, spelledCount, letterPos);
     const letter = spellableLetters[letterPos];
+    speech.prepareListen();
+    const request = ++pronounceRequest.current;
+    setPronouncing(false);
+    setPronounceNotice('');
     void onPronounce?.(card, result.completed ? `${letter}. ${card.word}` : letter, true)
-      .catch(() => setPronounceNotice("Couldn't play audio. Please try again."));
+      .catch(() => {
+        if (request === pronounceRequest.current) {
+          setPronounceNotice("Couldn't play audio. Please try again.");
+        }
+      });
     setSpelledCount(result.nextStep);
     setActiveLetterIdx(letterPos);
     if (letterTimerRef.current) {
@@ -310,7 +324,8 @@ function FlashcardItem({
     _: MouseEvent | TouchEvent | PointerEvent,
     info: PanInfo
   ) => {
-    window.setTimeout(() => {
+    window.clearTimeout(dragResetTimerRef.current);
+    dragResetTimerRef.current = window.setTimeout(() => {
       didDragRef.current = false;
     }, 90);
     const threshold = 90;
@@ -354,8 +369,8 @@ function FlashcardItem({
         {[0.6, 1, 0.75].map((height, index) => (
           <motion.span
             key={index}
-            animate={pronouncing ? { scaleY: [0.4, 1.15, 0.5, 1, 0.4] } : { scaleY: height }}
-            transition={pronouncing ? { duration: 0.55, repeat: Infinity, delay: index * 0.12 } : { duration: 0.2 }}
+            animate={pronouncing && !reducedMotion ? { scaleY: [0.4, 1.15, 0.5, 1, 0.4] } : { scaleY: height }}
+            transition={pronouncing && !reducedMotion ? { duration: 0.55, repeat: Infinity, delay: index * 0.12 } : { duration: 0.2 }}
             className={`h-full w-[2.5px] origin-bottom rounded-full ${pronouncing ? 'bg-white' : 'bg-indigo-500/70'}`}
           />
         ))}
@@ -375,6 +390,7 @@ function FlashcardItem({
       dragConstraints={{ left: 0, right: 0 }}
       dragElastic={0.42}
       onDragStart={() => {
+        window.clearTimeout(dragResetTimerRef.current);
         didDragRef.current = true;
       }}
       onDragEnd={handleDragEnd}
@@ -400,7 +416,7 @@ function FlashcardItem({
           damping: 24,
           mass: 0.85,
         }}
-        className="preserve-3d relative w-full min-h-[452px] sm:min-h-[545px]"
+        className="preserve-3d relative grid grid-cols-1 w-full min-h-[452px] sm:min-h-[545px]"
       >
         {/* ==================== FRONT FACE ==================== */}
         <section
@@ -409,7 +425,7 @@ function FlashcardItem({
           inert={!isPresent || effectiveFlipped}
           data-testid={isPresent ? 'card-front' : undefined}
           onClick={handleCardSurfaceClick}
-          className={`backface-hidden absolute inset-0 rounded-[32px] bg-white border cardstock-shadow-active p-5 sm:p-8 flex flex-col justify-between transition-colors duration-300 ${
+          className={`backface-hidden col-start-1 row-start-1 w-full h-full rounded-[32px] bg-white border cardstock-shadow-active p-5 sm:p-8 flex flex-col justify-between transition-colors duration-300 ${
             speechGlow
               ? 'border-emerald-400 outline-3 outline-emerald-200/70'
               : isMastered
@@ -477,6 +493,8 @@ function FlashcardItem({
                       scaleY: [1, 0.76, 1.18, 0.94, 1],
                       rotate: [0, -6, 6, -3, 0],
                     }
+                  : reducedMotion
+                  ? undefined
                   : { y: [0, -5, 0] }
               }
               transition={
@@ -506,6 +524,7 @@ function FlashcardItem({
                 fallbackEmoji={card.emoji}
                 className="relative z-10 w-22 h-22 sm:w-30 sm:h-30 object-contain drop-shadow-[0_10px_16px_rgba(15,23,42,0.15)]"
                 fallbackClassName="relative z-10 text-[4.75rem] sm:text-[6.5rem] leading-none"
+                multiFallbackClassName="relative z-10 text-[2.75rem] sm:text-[3.75rem] leading-none whitespace-nowrap"
               />
               <span className="sr-only">{card.word}</span>
             </motion.button>
@@ -541,7 +560,7 @@ function FlashcardItem({
           inert={!isPresent || !effectiveFlipped}
           data-testid={isPresent ? 'card-back' : undefined}
           onClick={handleCardSurfaceClick}
-          className={`backface-hidden rotate-y-180 absolute inset-0 rounded-[32px] bg-white border cardstock-shadow-active p-5 sm:p-8 flex flex-col justify-between transition-colors duration-300 ${
+          className={`backface-hidden rotate-y-180 col-start-1 row-start-1 w-full h-full rounded-[32px] bg-white border cardstock-shadow-active p-5 sm:p-8 flex flex-col justify-between transition-colors duration-300 ${
             speechGlow
               ? 'border-emerald-400 outline-3 outline-emerald-200/70'
               : isMastered
@@ -566,6 +585,7 @@ function FlashcardItem({
                   fallbackEmoji={card.emoji}
                   className="w-6 h-6 object-contain"
                   fallbackClassName="text-xl leading-none"
+                  multiFallbackClassName="text-sm leading-none whitespace-nowrap"
                 />
               </span>
               <div>
@@ -695,12 +715,16 @@ function FlashcardItem({
                       {isNext && (
                         <motion.span
                           aria-hidden="true"
-                          animate={{ opacity: [0.35, 0.95, 0.35] }}
-                          transition={{
-                            duration: 1.5,
-                            repeat: Infinity,
-                            ease: 'easeInOut',
-                          }}
+                          animate={reducedMotion ? { opacity: 0.7 } : { opacity: [0.35, 0.95, 0.35] }}
+                          transition={
+                            reducedMotion
+                              ? { duration: 0 }
+                              : {
+                                  duration: 1.5,
+                                  repeat: Infinity,
+                                  ease: 'easeInOut',
+                                }
+                          }
                           className="pointer-events-none absolute -inset-0.5 rounded-xl ring-2 ring-indigo-300"
                         />
                       )}
@@ -753,6 +777,15 @@ export function FlashcardStage({
 }: FlashcardStageProps) {
   const [bursts, setBursts] = useState<BurstItem[]>([]);
   const burstCounter = useRef(0);
+  const burstTimersRef = useRef(new Set<number>());
+
+  useEffect(() => {
+    const timers = burstTimersRef.current;
+    return () => {
+      timers.forEach((timerId) => window.clearTimeout(timerId));
+      timers.clear();
+    };
+  }, []);
 
   // Shared MotionValue reflecting top-card drag for continuous stacked-card lift
   const stackDragX = useMotionValue(0);
@@ -777,9 +810,11 @@ export function FlashcardStage({
   const spawnBurst = useCallback((kind: 'star' | 'emoji') => {
     const id = ++burstCounter.current;
     setBursts((prev) => [...prev.slice(-3), { id, kind }]);
-    window.setTimeout(() => {
+    const timerId = window.setTimeout(() => {
+      burstTimersRef.current.delete(timerId);
       setBursts((prev) => prev.filter((item) => item.id !== id));
     }, 700);
+    burstTimersRef.current.add(timerId);
   }, []);
 
   return (
@@ -794,8 +829,8 @@ export function FlashcardStage({
         <motion.div
           key={`third-${thirdCard.id}`}
           aria-hidden="true"
-          initial={{ opacity: 0.6, scale: 0.935 }}
-          animate={{ opacity: 1, scale: 1 }}
+          initial={{ opacity: 0.6 }}
+          animate={{ opacity: 1 }}
           transition={{ duration: 0.25, ease: 'easeOut' }}
           className="absolute inset-0 rounded-[32px] border border-slate-300/75 cardstock-shadow pointer-events-none overflow-hidden"
           style={{
@@ -814,8 +849,8 @@ export function FlashcardStage({
         <motion.div
           key={`next-${nextCard.id}`}
           aria-hidden="true"
-          initial={{ opacity: 0.7, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
+          initial={{ opacity: 0.7 }}
+          animate={{ opacity: 1 }}
           transition={{ duration: 0.25, ease: 'easeOut' }}
           style={{
             scale: peekScale,
@@ -843,6 +878,7 @@ export function FlashcardStage({
                 fallbackEmoji={nextCard.emoji}
                 className="w-20 h-20 sm:w-28 sm:h-28 object-contain"
                 fallbackClassName="text-6xl"
+                multiFallbackClassName="text-[2.25rem] sm:text-[3rem] leading-none whitespace-nowrap"
               />
             </div>
           </div>

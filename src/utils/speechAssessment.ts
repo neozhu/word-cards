@@ -15,7 +15,7 @@ export interface Assessment {
   grade: 'retry' | 'good' | 'great';
 }
 
-interface Credentials {
+export interface Credentials {
   applicationId: string;
   userId: string;
   warrantId: string;
@@ -41,6 +41,16 @@ type SpeechEngineConstructor = new (options: Credentials & {
 declare global {
   interface Window {
     EngineEvaluat?: SpeechEngineConstructor;
+  }
+}
+
+export const WARRANT_TTL_MS = 240_000;
+export const UNAVAILABLE_BACKOFF_MS = 300_000;
+
+export class AssessmentUnavailableError extends Error {
+  constructor(message = 'Speech scoring is unavailable.') {
+    super(message);
+    this.name = 'AssessmentUnavailableError';
   }
 }
 
@@ -73,22 +83,98 @@ export function getDemoAssessment(duration: number, random = Math.random): Asses
   return { score, grade: score < 65 ? 'retry' : score < 85 ? 'good' : 'great' };
 }
 
-async function authorize(signal: AbortSignal): Promise<Credentials> {
-  const response = await fetch('/api/speak/authorize', {
-    method: 'POST',
-    signal: AbortSignal.any([signal, AbortSignal.timeout(10000)]),
-  });
-  if (response.status === 503 || response.status === 404) throw new Error('Speech scoring is unavailable.');
-  if (!response.ok) throw new Error('Could not connect to speech scoring.');
-  const payload: unknown = await response.json();
-  if (typeof payload !== 'object' || payload === null
-    || !('applicationId' in payload) || typeof payload.applicationId !== 'string'
-    || !('userId' in payload) || typeof payload.userId !== 'string'
-    || !('warrantId' in payload) || typeof payload.warrantId !== 'string') {
-    throw new Error('Speech scoring is unavailable.');
-  }
-  return { applicationId: payload.applicationId, userId: payload.userId, warrantId: payload.warrantId };
+export function createCredentialCache({
+  fetcher = (...args) => fetch(...args),
+  now = () => Date.now(),
+  ttlMs = WARRANT_TTL_MS,
+  unavailableBackoffMs = UNAVAILABLE_BACKOFF_MS,
+}: {
+  fetcher?: typeof fetch;
+  now?: () => number;
+  ttlMs?: number;
+  unavailableBackoffMs?: number;
+} = {}) {
+  let cached: { credentials: Credentials; expiresAt: number } | null = null;
+  let inFlight: Promise<Credentials> | null = null;
+  let unavailableUntil = 0;
+
+  const invalidate = () => {
+    cached = null;
+  };
+
+  const get = async (signal?: AbortSignal): Promise<{ credentials: Credentials; fromCache: boolean }> => {
+    const current = now();
+    if (current < unavailableUntil) {
+      throw new AssessmentUnavailableError();
+    }
+    if (cached && current < cached.expiresAt) {
+      return { credentials: cached.credentials, fromCache: true };
+    }
+
+    if (!inFlight) {
+      inFlight = (async () => {
+        const response = await fetcher('/api/speak/authorize', {
+          method: 'POST',
+          signal: AbortSignal.timeout(10000),
+        });
+        if (response.status === 503 || response.status === 404) {
+          unavailableUntil = now() + unavailableBackoffMs;
+          throw new AssessmentUnavailableError();
+        }
+        if (!response.ok) {
+          throw new Error('Could not connect to speech scoring.');
+        }
+        const payload: unknown = await response.json();
+        if (
+          typeof payload !== 'object' ||
+          payload === null ||
+          !('applicationId' in payload) ||
+          typeof payload.applicationId !== 'string' ||
+          !('userId' in payload) ||
+          typeof payload.userId !== 'string' ||
+          !('warrantId' in payload) ||
+          typeof payload.warrantId !== 'string'
+        ) {
+          throw new AssessmentUnavailableError();
+        }
+        const credentials: Credentials = {
+          applicationId: payload.applicationId,
+          userId: payload.userId,
+          warrantId: payload.warrantId,
+        };
+        cached = { credentials, expiresAt: now() + ttlMs };
+        return credentials;
+      })().finally(() => {
+        inFlight = null;
+      });
+    }
+
+    const activeFetch = inFlight;
+    if (!signal) {
+      return { credentials: await activeFetch, fromCache: false };
+    }
+    signal.throwIfAborted();
+    const credentials = await new Promise<Credentials>((resolve, reject) => {
+      const onAbort = () => reject(signal.reason ?? new DOMException('Aborted', 'AbortError'));
+      signal.addEventListener('abort', onAbort, { once: true });
+      activeFetch.then(
+        (creds) => {
+          signal.removeEventListener('abort', onAbort);
+          resolve(creds);
+        },
+        (err: unknown) => {
+          signal.removeEventListener('abort', onAbort);
+          reject(err);
+        }
+      );
+    });
+    return { credentials, fromCache: false };
+  };
+
+  return { get, invalidate };
 }
+
+const credentialCache = createCredentialCache();
 
 let engineLoad: Promise<SpeechEngineConstructor> | undefined;
 
@@ -121,11 +207,29 @@ function loadEngine(): Promise<SpeechEngineConstructor> {
   return engineLoad;
 }
 
+export function warmSpeechAssessment(): void {
+  if (typeof window === 'undefined' || typeof document === 'undefined') return;
+  void credentialCache
+    .get()
+    .then(() => loadEngine())
+    .catch(() => {});
+}
+
 const evaluationSampleRate = 16000;
 
 async function toWave(recording: Blob): Promise<Uint8Array> {
   const decoder = new OfflineAudioContext(1, 1, evaluationSampleRate);
-  const audio = await decoder.decodeAudioData(await recording.arrayBuffer());
+  const decoded = await decoder.decodeAudioData(await recording.arrayBuffer());
+  let audio = decoded;
+  if (decoded.sampleRate !== evaluationSampleRate) {
+    const targetLength = Math.max(1, Math.ceil(decoded.duration * evaluationSampleRate));
+    const resampler = new OfflineAudioContext(1, targetLength, evaluationSampleRate);
+    const source = resampler.createBufferSource();
+    source.buffer = decoded;
+    source.connect(resampler.destination);
+    source.start(0);
+    audio = await resampler.startRendering();
+  }
   const channels = Array.from({ length: audio.numberOfChannels }, (_, channel) => audio.getChannelData(channel));
   const dataLength = audio.length * 2;
   const pcm = new DataView(new ArrayBuffer(44 + dataLength));
@@ -150,10 +254,13 @@ async function toWave(recording: Blob): Promise<Uint8Array> {
   return new Uint8Array(pcm.buffer);
 }
 
-export async function assessSpeech(prompt: SpeechPrompt, recording: Blob, signal: AbortSignal): Promise<Assessment> {
-  const [credentials, Engine, wave] = await Promise.all([authorize(signal), loadEngine(), toWave(recording)]);
-  signal.throwIfAborted();
-
+function runEngine(
+  prompt: SpeechPrompt,
+  credentials: Credentials,
+  Engine: SpeechEngineConstructor,
+  wave: Uint8Array,
+  signal: AbortSignal
+): Promise<Assessment> {
   return new Promise<Assessment>((resolve, reject) => {
     let engine: SpeechEngine | undefined;
     let finished = false;
@@ -209,4 +316,25 @@ export async function assessSpeech(prompt: SpeechPrompt, recording: Blob, signal
       fail();
     }
   });
+}
+
+export async function assessSpeech(prompt: SpeechPrompt, recording: Blob, signal: AbortSignal): Promise<Assessment> {
+  const [{ credentials, fromCache }, Engine, wave] = await Promise.all([
+    credentialCache.get(signal),
+    loadEngine(),
+    toWave(recording),
+  ]);
+  signal.throwIfAborted();
+
+  try {
+    return await runEngine(prompt, credentials, Engine, wave, signal);
+  } catch (error) {
+    if (!fromCache || signal.aborted) {
+      throw error;
+    }
+    credentialCache.invalidate();
+    const { credentials: freshCredentials } = await credentialCache.get(signal);
+    signal.throwIfAborted();
+    return runEngine(prompt, freshCredentials, Engine, wave, signal);
+  }
 }

@@ -1,3 +1,8 @@
+map "${TTS_API_KEY}" $tts_auth_header {
+    "" "";
+    default "Bearer ${TTS_API_KEY}";
+}
+
 server {
     listen 80;
     server_name localhost;
@@ -5,10 +10,31 @@ server {
     root /usr/share/nginx/html;
     index index.html;
 
+    gzip on;
+    gzip_vary on;
+    gzip_min_length 1024;
+    gzip_types text/plain text/css application/javascript application/json image/svg+xml;
+
+    location = /index.html {
+        add_header Cache-Control "no-cache";
+    }
+
+    location /assets/ {
+        add_header Cache-Control "public, max-age=31536000, immutable";
+    }
+
+    location /src/assets/ {
+        add_header Cache-Control "public, max-age=2592000";
+    }
+
+    location /sdk/ {
+        add_header Cache-Control "public, max-age=604800";
+    }
+
     location = /api/speech {
         proxy_pass ${TTS_API_URL}/v1/audio/speech;
         proxy_set_header Host $proxy_host;
-        proxy_set_header Authorization "Bearer ${TTS_API_KEY}";
+        proxy_set_header Authorization $tts_auth_header;
         proxy_ssl_server_name on;
         proxy_read_timeout 120s;
     }

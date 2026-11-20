@@ -4,6 +4,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { CATEGORIES, VOCAB_CARDS } from '../data/vocabData';
 import {
+  advanceStudyDeck,
   buildQuizQuestion,
   clearCategoryMasteredIds,
   filterCardsByCategory,
@@ -94,6 +95,7 @@ test('all cards have unique IDs, English phrases, and an image or emoji', () => 
   const hanRegex = /\p{Script=Han}/u;
   assert.equal(new Set(VOCAB_CARDS.map((card) => card.id)).size, VOCAB_CARDS.length);
   assert.equal(new Set(VOCAB_CARDS.map((card) => card.word.toLowerCase())).size, VOCAB_CARDS.length);
+  assert.equal(new Set(VOCAB_CARDS.map((card) => card.emoji)).size, VOCAB_CARDS.length);
   for (const cat of CATEGORIES) {
     assert.ok(!hanRegex.test(cat.label), `Unexpected Chinese in category ${cat.id}`);
     assert.ok(cat.emoji.trim(), `Missing category emoji: ${cat.id}`);
@@ -159,5 +161,37 @@ test('getSpellableLetters and stepSpellingProgress guide sequential spelling and
     matched: true,
     completed: false,
   });
+});
+
+test('advanceStudyDeck wraps normally and prunes newly mastered cards when filtering unlearned', () => {
+  const sample = VOCAB_CARDS.slice(0, 4);
+
+  const normalNext = advanceStudyDeck(sample, 3, 1, [sample[0].id], false);
+  assert.equal(normalNext.deck.length, 4);
+  assert.equal(normalNext.nextIndex, 0);
+
+  // Starring index 1 (second card) and advancing next keeps the 3rd card in slot 1
+  const prunedNext = advanceStudyDeck(sample, 1, 1, [sample[1].id], true);
+  assert.deepEqual(prunedNext.deck.map((c) => c.id), [sample[0].id, sample[2].id, sample[3].id]);
+  assert.equal(prunedNext.nextIndex, 1);
+
+  // Starring the last card and advancing next wraps to index 0
+  const prunedEndNext = advanceStudyDeck(sample, 3, 1, [sample[3].id], true);
+  assert.deepEqual(prunedEndNext.deck.map((c) => c.id), [sample[0].id, sample[1].id, sample[2].id]);
+  assert.equal(prunedEndNext.nextIndex, 0);
+
+  // Starring index 1 and going prev steps back to index 0
+  const prunedPrev = advanceStudyDeck(sample, 1, -1, [sample[1].id], true);
+  assert.deepEqual(prunedPrev.deck.map((c) => c.id), [sample[0].id, sample[2].id, sample[3].id]);
+  assert.equal(prunedPrev.nextIndex, 0);
+
+  // Starring index 0 and going prev wraps to the end of the remaining deck
+  const prunedFirstPrev = advanceStudyDeck(sample, 0, -1, [sample[0].id], true);
+  assert.deepEqual(prunedFirstPrev.deck.map((c) => c.id), [sample[1].id, sample[2].id, sample[3].id]);
+  assert.equal(prunedFirstPrev.nextIndex, 2);
+
+  // Starring the final remaining card and swiping yields an empty deck
+  const allMastered = advanceStudyDeck([sample[0]], 0, 1, [sample[0].id], true);
+  assert.deepEqual(allMastered, { deck: [], nextIndex: 0 });
 });
 

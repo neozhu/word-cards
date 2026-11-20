@@ -3,8 +3,6 @@ import { AnimatePresence, motion } from 'motion/react';
 export interface BurstItem {
   id: number;
   kind: 'star' | 'emoji';
-  x?: number;
-  y?: number;
 }
 
 interface ParticleBurstProps {

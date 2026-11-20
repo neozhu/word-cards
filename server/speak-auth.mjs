@@ -18,8 +18,11 @@ export function createSpeakAuthorization({ appId, appSecret, clientIp, trustProx
     if (!appId || !appSecret) return send(503, { error: 'Speech scoring is not configured.' });
 
     const peerIp = request.socket.remoteAddress?.replace(/^::ffff:/, '');
-    const forwardedIp = request.headers['x-real-ip'];
-    const ip = clientIp || (trustProxy && typeof forwardedIp === 'string' ? forwardedIp : peerIp);
+    const rawForwarded = request.headers['x-real-ip'];
+    const forwardedIp = typeof rawForwarded === 'string'
+      ? rawForwarded.trim().replace(/^::ffff:/, '')
+      : undefined;
+    const ip = clientIp || (trustProxy && forwardedIp ? forwardedIp : peerIp);
     if (!ip || !isIP(ip)) return send(400, { error: 'Client address is unavailable.' });
 
     const userId = randomUUID();
@@ -42,10 +45,13 @@ export function createSpeakAuthorization({ appId, appSecret, clientIp, trustProx
       const result = await upstream.json();
       const warrantId = result?.data?.warrant_id;
       if (!upstream.ok || result?.code !== 0 || typeof warrantId !== 'string' || !warrantId) {
+        console.error(`Speech auth upstream rejected: status=${upstream.status} code=${result?.code ?? 'unknown'}`);
         return send(502, { error: 'Speech scoring authorization failed.' });
       }
       return send(200, { applicationId: appId, userId, warrantId });
-    } catch {
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`Speech auth upstream request error: ${message}`);
       return send(502, { error: 'Speech scoring authorization failed.' });
     }
   };
@@ -58,7 +64,8 @@ if (import.meta.main) {
     trustProxy: true,
   });
   createServer((request, response) => {
-    if (request.url === '/api/speak/authorize') return authorize(request, response);
+    const pathname = new URL(request.url ?? '/', 'http://127.0.0.1').pathname;
+    if (pathname === '/api/speak/authorize') return authorize(request, response);
     response.writeHead(404).end();
   }).listen(Number(process.env.SPEAK_AUTH_PORT || 4318), '127.0.0.1');
 }

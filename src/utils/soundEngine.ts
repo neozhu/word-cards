@@ -66,7 +66,7 @@ class SoundEngine {
       }
 
       if (this.ctx.state === 'suspended') {
-        void this.ctx.resume();
+        void this.ctx.resume().catch(() => {});
       }
       return this.ctx;
     } catch {
@@ -264,15 +264,6 @@ class SoundEngine {
     const now = ctx.currentTime;
     this.playMarimbaNote(ctx, 246.94, now, 0.16, 0.16); // B3
     this.playMarimbaNote(ctx, 220.0, now + 0.07, 0.2, 0.14); // A3
-  }
-
-  /** Playful ascending pentatonic marimba note when tapping spelling letters */
-  public playLetterNote(index: number): void {
-    const ctx = this.ensureContext();
-    if (!ctx) return;
-    const scale = [523.25, 587.33, 659.25, 783.99, 880.0, 1046.5, 1174.66];
-    const freq = scale[index % scale.length];
-    this.playMarimbaNote(ctx, freq, ctx.currentTime, 0.18, 0.15);
   }
 
   /** Celebratory 5-note fanfare when mastering a full category or hitting a quiz streak */

@@ -39,3 +39,59 @@ test('signs the Aliyun authorization form server-side and returns only browser c
     await once(server, 'close');
   }
 });
+
+test('sanitizes x-real-ip, enforces cross-site and credential checks, and reports upstream errors', async () => {
+  let seenIp;
+  let upstreamOk = true;
+  const auth = createSpeakAuthorization({
+    appId: 'test-app',
+    appSecret: 'test-secret',
+    trustProxy: true,
+    async authorize(_url, options) {
+      seenIp = Object.fromEntries(options.body).user_client_ip;
+      if (!upstreamOk) {
+        return Response.json({ code: 4001 }, { status: 400 });
+      }
+      return Response.json({ code: 0, data: { warrant_id: 'proxy-warrant' } });
+    },
+  });
+  const unconfigured = createSpeakAuthorization({ appId: '', appSecret: '' });
+
+  const server = createServer((req, res) => {
+    if (req.url === '/unconfigured') return unconfigured(req, res);
+    return auth(req, res);
+  });
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const origConsoleError = console.error;
+  console.error = () => {};
+  try {
+    const base = `http://127.0.0.1:${server.address().port}`;
+    const crossSite = await fetch(`${base}/api/speak/authorize`, {
+      method: 'POST',
+      headers: { 'sec-fetch-site': 'cross-site' },
+    });
+    assert.equal(crossSite.status, 403);
+
+    const missingCreds = await fetch(`${base}/unconfigured`, { method: 'POST' });
+    assert.equal(missingCreds.status, 503);
+
+    const proxied = await fetch(`${base}/api/speak/authorize`, {
+      method: 'POST',
+      headers: { 'x-real-ip': '  ::ffff:198.51.100.7  ' },
+    });
+    assert.equal(proxied.status, 200);
+    assert.equal(seenIp, '198.51.100.7');
+
+    upstreamOk = false;
+    const failed = await fetch(`${base}/api/speak/authorize`, {
+      method: 'POST',
+      headers: { 'x-real-ip': '198.51.100.7' },
+    });
+    assert.equal(failed.status, 502);
+  } finally {
+    console.error = origConsoleError;
+    server.close();
+    await once(server, 'close');
+  }
+});
