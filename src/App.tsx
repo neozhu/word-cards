@@ -474,10 +474,10 @@ export default function App() {
       </header>
 
       {/* Main Centered Learning Stage */}
-      <main className="relative z-10 flex-1 w-full max-w-5xl mx-auto px-4 sm:px-6 py-2 sm:py-6 flex flex-col items-center justify-center">
+      <main className="pointer-events-none relative z-10 flex-1 w-full max-w-5xl mx-auto px-4 sm:px-6 py-2 sm:py-6 flex flex-col items-center justify-center">
         {/* Category Filter Tabs with Sliding Active Pill */}
         <LayoutGroup id="category-tabs">
-          <div className="w-full max-w-2xl flex items-center gap-2 mb-4 sm:mb-7">
+          <div className="pointer-events-auto w-full max-w-2xl flex items-center gap-2 mb-4 sm:mb-7">
             <button
               type="button"
               aria-label="Scroll categories left"
@@ -569,7 +569,7 @@ export default function App() {
                 transition: { duration: 0.14, ease: 'easeOut' },
               }}
               data-testid="milestone-banner"
-              className="w-full max-w-[460px] mb-4 rounded-2xl bg-gradient-to-r from-amber-50 via-white to-emerald-50 border border-amber-200/90 shadow-md px-4 py-3 flex flex-wrap items-center justify-between gap-2.5"
+              className="pointer-events-auto w-full max-w-[460px] mb-4 rounded-2xl bg-gradient-to-r from-amber-50 via-white to-emerald-50 border border-amber-200/90 shadow-md px-4 py-3 flex flex-wrap items-center justify-between gap-2.5"
             >
               <div className="flex items-center gap-2.5">
                 <span className="w-8 h-8 rounded-xl bg-amber-100 text-amber-600 inline-flex items-center justify-center shrink-0">
@@ -639,7 +639,7 @@ export default function App() {
                   />
 
                   {(mastery.mastered > 0 || onlyUnlearned) && (
-                    <div className="mt-9 sm:mt-11 flex flex-wrap items-center justify-center gap-2">
+                    <div className="pointer-events-auto mt-9 sm:mt-11 flex flex-wrap items-center justify-center gap-2">
                       <button
                         type="button"
                         onClick={handleToggleOnlyUnlearned}
@@ -674,7 +674,7 @@ export default function App() {
                 /* Joyful All-Caught-Up Empty State when To Learn filter has 0 unstarred words left */
                 <div
                   data-testid="all-learned-empty-state"
-                  className="w-full max-w-[440px] rounded-[32px] bg-white border border-slate-200/95 cardstock-shadow-active p-8 text-center flex flex-col items-center"
+                  className="pointer-events-auto w-full max-w-[440px] rounded-[32px] bg-white border border-slate-200/95 cardstock-shadow-active p-8 text-center flex flex-col items-center"
                 >
                   <span className="w-16 h-16 rounded-2xl bg-amber-100 text-amber-500 inline-flex items-center justify-center mb-4">
                     <Trophy className="w-8 h-8" />

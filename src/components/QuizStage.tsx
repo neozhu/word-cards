@@ -181,7 +181,7 @@ export function QuizStage({
 
   return (
     <div
-      className="relative w-full max-w-[540px] mx-auto"
+      className="pointer-events-auto relative w-full max-w-[540px] mx-auto"
       data-testid="quiz-stage"
     >
       <ParticleBurst bursts={bursts} />

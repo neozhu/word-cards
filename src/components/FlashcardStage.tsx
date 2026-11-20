@@ -819,7 +819,7 @@ export function FlashcardStage({
 
   return (
     <div
-      className="relative w-full max-w-[440px] mx-auto select-none"
+      className="pointer-events-auto relative w-full max-w-[440px] mx-auto select-none"
       data-testid="card-stage"
     >
       <ParticleBurst bursts={bursts} />
