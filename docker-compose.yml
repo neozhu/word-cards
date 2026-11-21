@@ -8,7 +8,6 @@ services:
     environment:
       TTS_API_URL: ${TTS_API_URL:-http://host.docker.internal:48731}
       TTS_API_KEY: ${TTS_API_KEY:-}
-      SPEAK_APP_ID: ${SPEAK_APP_ID:-}
-      SPEAK_APP_SECRET: ${SPEAK_APP_SECRET:-}
-      SPEAK_LOCAL_CLIENT_IP: ${SPEAK_LOCAL_CLIENT_IP:-}
+      OPENPRONOUNCE_API_URL: ${OPENPRONOUNCE_API_URL:-https://openpronounce.blazorserver.com}
+      OPENPRONOUNCE_API_KEY: ${OPENPRONOUNCE_API_KEY:-}
     restart: unless-stopped

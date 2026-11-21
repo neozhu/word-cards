@@ -3,24 +3,13 @@ import react from '@vitejs/plugin-react';
 import fs from 'fs';
 import path from 'path';
 import {defineConfig, loadEnv} from 'vite';
-import {createSpeakAuthorization} from './server/speak-auth.mjs';
 
 export default defineConfig(({mode}) => {
-  const env = loadEnv(mode, process.cwd(), ['TTS_', 'SPEAK_']);
+  const env = loadEnv(mode, process.cwd(), ['TTS_', 'OPENPRONOUNCE_']);
   return {
     plugins: [
       react(),
       tailwindcss(),
-      {
-        name: 'speech-assessment-authorization',
-        configureServer(server) {
-          server.middlewares.use('/api/speak/authorize', createSpeakAuthorization({
-            appId: env.SPEAK_APP_ID,
-            appSecret: env.SPEAK_APP_SECRET,
-            clientIp: env.SPEAK_LOCAL_CLIENT_IP,
-          }));
-        },
-      },
       // Copies src/assets into dist/ so root-relative URLs like
       // "/src/assets/images/..." (e.g. generate_image output) still resolve
       // in production builds. Do not remove.
@@ -57,6 +46,23 @@ export default defineConfig(({mode}) => {
     },
     server: {
       proxy: {
+        '^/api/speak/assess(?:\\?|$)': {
+          target: env.OPENPRONOUNCE_API_URL || 'https://openpronounce.blazorserver.com',
+          changeOrigin: true,
+          rewrite: () => '/api/v1/assess',
+          proxyTimeout: 85_000,
+          bypass(request) {
+            if (request.headers['sec-fetch-site'] === 'cross-site') return false;
+          },
+          configure(proxy) {
+            proxy.on('proxyReq', (request) => {
+              request.removeHeader('x-api-key');
+              if (env.OPENPRONOUNCE_API_KEY) {
+                request.setHeader('x-api-key', env.OPENPRONOUNCE_API_KEY);
+              }
+            });
+          },
+        },
         '/api/speech': {
           target: env.TTS_API_URL || 'http://127.0.0.1:48731',
           changeOrigin: true,

@@ -3,223 +3,39 @@ export interface SpeechPrompt {
   text: string;
 }
 
-interface AssessmentRequest {
-  coreType: 'en.word_kid.score' | 'en.sent_kid.score';
-  refText: string;
-  rank: 100;
-  attachAudioUrl: 0;
-}
-
 export interface Assessment {
   score: number;
   grade: 'retry' | 'good' | 'great';
 }
 
-export interface Credentials {
-  applicationId: string;
-  userId: string;
-  warrantId: string;
+function gradeScore(score: number): Assessment {
+  return { score, grade: score < 80 ? 'retry' : score < 85 ? 'good' : 'great' };
 }
 
-interface SpeechEngine {
-  configAudio(audio: { sampleRate: number; channel: number; sampleBytes: number; audioType: 'wav' }): void;
-  start(parameters: AssessmentRequest & { warrantId: string }): void;
-  feed(data: string): void;
-  stop(): void;
-  destroyEngine(): void;
-}
-
-type SpeechEngineConstructor = new (options: Credentials & {
-  coreType: AssessmentRequest['coreType'];
-  autoConnect: false;
-  logIsOpen: false;
-  engineFirstInitDone(): void;
-  engineBackResultDone(result: unknown, complete?: boolean): void;
-  engineBackResultFail(): void;
-  JSSDKNotSupport(): void;
-  noNetwork(): void;
-}) => SpeechEngine;
-
-declare global {
-  interface Window {
-    EngineEvaluat?: SpeechEngineConstructor;
+export function getAssessment(payload: unknown): Assessment | null {
+  if (typeof payload === 'object' && payload !== null && 'status' in payload && 'reliable' in payload && 'scores' in payload) {
+    if (payload.status === 'uncertain' && payload.reliable === false && payload.scores === null) {
+      return null;
+    }
+    const { scores } = payload;
+    if (payload.status === 'assessed' && payload.reliable === true && typeof scores === 'object' && scores !== null && 'overall' in scores) {
+      const score = scores.overall;
+      if (typeof score === 'number' && Number.isFinite(score) && score >= 0 && score <= 100) {
+        return gradeScore(score);
+      }
+    }
   }
-}
-
-export const WARRANT_TTL_MS = 240_000;
-export const UNAVAILABLE_BACKOFF_MS = 300_000;
-
-export class AssessmentUnavailableError extends Error {
-  constructor(message = 'Speech scoring is unavailable.') {
-    super(message);
-    this.name = 'AssessmentUnavailableError';
-  }
-}
-
-export function getAssessmentRequest(prompt: SpeechPrompt): AssessmentRequest {
-  return {
-    coreType: prompt.kind === 'word' ? 'en.word_kid.score' : 'en.sent_kid.score',
-    refText: prompt.text,
-    rank: 100,
-    attachAudioUrl: 0,
-  };
-}
-
-export function getAssessment(message: unknown): Assessment {
-  const payload: unknown = typeof message === 'string' ? JSON.parse(message) : message;
-  if (typeof payload !== 'object' || payload === null || !('result' in payload)) {
-    throw new Error('No valid score was returned.');
-  }
-  const result = payload.result;
-  const score = typeof result === 'object' && result !== null && 'overall' in result ? result.overall : null;
-  if (typeof score !== 'number' || !Number.isFinite(score) || score < 0 || score > 100) {
-    throw new Error('No valid score was returned.');
-  }
-
-  return { score, grade: score < 65 ? 'retry' : score < 85 ? 'good' : 'great' };
+  throw new Error('No valid score was returned.');
 }
 
 export function getDemoAssessment(duration: number, random = Math.random): Assessment {
-  const [minimum, maximum] = duration < 650 ? [48, 61] : duration < 1150 ? [72, 82] : [88, 98];
-  const score = minimum + Math.floor(random() * (maximum - minimum + 1));
-  return { score, grade: score < 65 ? 'retry' : score < 85 ? 'good' : 'great' };
-}
-
-export function createCredentialCache({
-  fetcher = (...args) => fetch(...args),
-  now = () => Date.now(),
-  ttlMs = WARRANT_TTL_MS,
-  unavailableBackoffMs = UNAVAILABLE_BACKOFF_MS,
-}: {
-  fetcher?: typeof fetch;
-  now?: () => number;
-  ttlMs?: number;
-  unavailableBackoffMs?: number;
-} = {}) {
-  let cached: { credentials: Credentials; expiresAt: number } | null = null;
-  let inFlight: Promise<Credentials> | null = null;
-  let unavailableUntil = 0;
-
-  const invalidate = () => {
-    cached = null;
-  };
-
-  const get = async (signal?: AbortSignal): Promise<{ credentials: Credentials; fromCache: boolean }> => {
-    const current = now();
-    if (current < unavailableUntil) {
-      throw new AssessmentUnavailableError();
-    }
-    if (cached && current < cached.expiresAt) {
-      return { credentials: cached.credentials, fromCache: true };
-    }
-
-    if (!inFlight) {
-      inFlight = (async () => {
-        const response = await fetcher('/api/speak/authorize', {
-          method: 'POST',
-          signal: AbortSignal.timeout(10000),
-        });
-        if (response.status === 503 || response.status === 404) {
-          unavailableUntil = now() + unavailableBackoffMs;
-          throw new AssessmentUnavailableError();
-        }
-        if (!response.ok) {
-          throw new Error('Could not connect to speech scoring.');
-        }
-        const payload: unknown = await response.json();
-        if (
-          typeof payload !== 'object' ||
-          payload === null ||
-          !('applicationId' in payload) ||
-          typeof payload.applicationId !== 'string' ||
-          !('userId' in payload) ||
-          typeof payload.userId !== 'string' ||
-          !('warrantId' in payload) ||
-          typeof payload.warrantId !== 'string'
-        ) {
-          throw new AssessmentUnavailableError();
-        }
-        const credentials: Credentials = {
-          applicationId: payload.applicationId,
-          userId: payload.userId,
-          warrantId: payload.warrantId,
-        };
-        cached = { credentials, expiresAt: now() + ttlMs };
-        return credentials;
-      })().finally(() => {
-        inFlight = null;
-      });
-    }
-
-    const activeFetch = inFlight;
-    if (!signal) {
-      return { credentials: await activeFetch, fromCache: false };
-    }
-    signal.throwIfAborted();
-    const credentials = await new Promise<Credentials>((resolve, reject) => {
-      const onAbort = () => reject(signal.reason ?? new DOMException('Aborted', 'AbortError'));
-      signal.addEventListener('abort', onAbort, { once: true });
-      activeFetch.then(
-        (creds) => {
-          signal.removeEventListener('abort', onAbort);
-          resolve(creds);
-        },
-        (err: unknown) => {
-          signal.removeEventListener('abort', onAbort);
-          reject(err);
-        }
-      );
-    });
-    return { credentials, fromCache: false };
-  };
-
-  return { get, invalidate };
-}
-
-const credentialCache = createCredentialCache();
-
-let engineLoad: Promise<SpeechEngineConstructor> | undefined;
-
-function loadEngine(): Promise<SpeechEngineConstructor> {
-  engineLoad ??= new Promise<SpeechEngineConstructor>((resolve, reject) => {
-    const frame = document.createElement('iframe');
-    frame.hidden = true;
-    // Some SDK versions request the microphone during initialization, even for file uploads.
-    frame.allow = "microphone 'none'";
-    const fail = () => {
-      window.clearTimeout(timeout);
-      frame.remove();
-      reject(new Error('Speech scoring is unavailable.'));
-    };
-    const timeout = window.setTimeout(fail, 10000);
-    const scriptURL = new URL(`${import.meta.env.BASE_URL}sdk/engine.js`, window.location.href);
-    frame.srcdoc = `<!doctype html><script src="${scriptURL.href}"></script>`;
-    frame.onload = () => {
-      const Engine = frame.contentWindow?.EngineEvaluat;
-      if (!Engine) return fail();
-      window.clearTimeout(timeout);
-      resolve(Engine);
-    };
-    frame.onerror = fail;
-    document.body.appendChild(frame);
-  }).catch((error: unknown) => {
-    engineLoad = undefined;
-    throw error;
-  });
-  return engineLoad;
-}
-
-export function warmSpeechAssessment(): void {
-  if (typeof window === 'undefined' || typeof document === 'undefined') return;
-  void credentialCache
-    .get()
-    .then(() => loadEngine())
-    .catch(() => {});
+  const [minimum, maximum] = duration < 650 ? [48, 61] : duration < 1150 ? [80, 84] : [88, 98];
+  return gradeScore(minimum + Math.floor(random() * (maximum - minimum + 1)));
 }
 
 const evaluationSampleRate = 16000;
 
-async function toWave(recording: Blob): Promise<Uint8Array> {
+async function toWave(recording: Blob): Promise<Blob> {
   const decoder = new OfflineAudioContext(1, 1, evaluationSampleRate);
   const decoded = await decoder.decodeAudioData(await recording.arrayBuffer());
   let audio = decoded;
@@ -253,93 +69,43 @@ async function toWave(recording: Blob): Promise<Uint8Array> {
     const clamped = Math.max(-1, Math.min(1, sample));
     pcm.setInt16(44 + index * 2, clamped * (clamped < 0 ? 32768 : 32767), true);
   }
-  return new Uint8Array(pcm.buffer);
+  return new Blob([pcm.buffer], { type: 'audio/wav' });
 }
 
-function runEngine(
-  prompt: SpeechPrompt,
-  credentials: Credentials,
-  Engine: SpeechEngineConstructor,
-  wave: Uint8Array,
-  signal: AbortSignal
-): Promise<Assessment> {
-  return new Promise<Assessment>((resolve, reject) => {
-    let engine: SpeechEngine | undefined;
-    let finished = false;
-    const timer = window.setTimeout(fail, 15000);
+const recordingExtensions: ReadonlyMap<string, string> = new Map([
+  ['audio/webm', 'webm'],
+  ['video/webm', 'webm'],
+  ['audio/ogg', 'ogg'],
+  ['audio/wav', 'wav'],
+  ['audio/mpeg', 'mp3'],
+  ['audio/flac', 'flac'],
+]);
 
-    function finish() {
-      if (finished) return false;
-      finished = true;
-      window.clearTimeout(timer);
-      signal.removeEventListener('abort', fail);
-      engine?.destroyEngine();
-      return true;
-    }
-
-    function fail() {
-      if (finish()) reject(new Error('Could not score this recording.'));
-    }
-
-    const assessmentRequest = getAssessmentRequest(prompt);
-    signal.addEventListener('abort', fail, { once: true });
-    try {
-      engine = new Engine({
-        ...credentials,
-        coreType: assessmentRequest.coreType,
-        autoConnect: false,
-        logIsOpen: false,
-        engineFirstInitDone: () => queueMicrotask(() => {
-          if (finished || !engine) return;
-          try {
-            engine.configAudio({ sampleRate: evaluationSampleRate, channel: 1, sampleBytes: 2, audioType: 'wav' });
-            engine.start({
-              ...assessmentRequest, warrantId: credentials.warrantId,
-            });
-            for (let offset = 0; offset < wave.length; offset += 8192) {
-              engine.feed(btoa(String.fromCharCode(...wave.subarray(offset, offset + 8192))));
-            }
-            engine.stop();
-          } catch {
-            fail();
-          }
-        }),
-        engineBackResultDone: (message, complete) => {
-          if (finished || complete === false) return;
-          try {
-            const result = getAssessment(message);
-            if (finish()) resolve(result);
-          } catch {
-            fail();
-          }
-        },
-        engineBackResultFail: () => queueMicrotask(fail),
-        JSSDKNotSupport: () => queueMicrotask(fail),
-        noNetwork: () => queueMicrotask(fail),
-      });
-    } catch {
-      fail();
-    }
-  });
-}
-
-export async function assessSpeech(prompt: SpeechPrompt, recording: Blob, signal: AbortSignal): Promise<Assessment> {
-  const [{ credentials, fromCache }, Engine, wave] = await Promise.all([
-    credentialCache.get(signal),
-    loadEngine(),
-    toWave(recording),
-  ]);
+export async function assessSpeech(prompt: SpeechPrompt, recording: Blob, signal: AbortSignal): Promise<Assessment | null> {
+  signal.throwIfAborted();
+  const mediaType = recording.type.split(';', 1)[0];
+  const extension = recordingExtensions.get(mediaType);
+  // Some browsers record MP4, which OpenPronounce does not accept.
+  const audio = extension
+    ? recording.slice(0, recording.size, mediaType === 'video/webm' ? 'audio/webm' : mediaType)
+    : await toWave(recording);
   signal.throwIfAborted();
 
-  try {
-    return await runEngine(prompt, credentials, Engine, wave, signal);
-  } catch (error) {
-    if (!fromCache || signal.aborted) {
-      throw error;
-    }
-    credentialCache.invalidate();
-    const { credentials: freshCredentials } = await credentialCache.get(signal);
-    signal.throwIfAborted();
-    return runEngine(prompt, freshCredentials, Engine, wave, signal);
+  const form = new FormData();
+  form.set('audio', audio, `recording.${extension ?? 'wav'}`);
+  form.set('text', prompt.text);
+  form.set('mode', prompt.kind);
+
+  const response = await fetch('/api/speak/assess', {
+    method: 'POST',
+    body: form,
+    signal: AbortSignal.any([signal, AbortSignal.timeout(90_000)]),
+  });
+  if (response.status === 422) {
+    return null;
   }
+  if (!response.ok) {
+    throw new Error('Could not score this recording.');
+  }
+  return getAssessment(await response.json());
 }

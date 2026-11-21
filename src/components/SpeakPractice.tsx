@@ -5,7 +5,6 @@ import { recordSpeech } from '../utils/localSpeechRecording';
 import {
   assessSpeech,
   getDemoAssessment,
-  warmSpeechAssessment,
   type Assessment,
   type SpeechPrompt,
 } from '../utils/speechAssessment';
@@ -16,10 +15,12 @@ export interface PracticeResult extends Assessment {
   demo: boolean;
 }
 
+type RecordingResult = PracticeResult | { audio: Blob; grade: null };
+
 type PracticeState =
   | { kind: 'idle' | 'preparing' | 'checking' }
   | { kind: 'recording'; prompt: SpeechPrompt }
-  | { kind: 'result'; result: PracticeResult };
+  | { kind: 'result'; result: RecordingResult };
 
 type LevelListener = (level: number | null) => void;
 
@@ -39,7 +40,7 @@ export function useSpeechPractice(
   const [playing, setPlaying] = useState(false);
   const [playbackFailed, setPlaybackFailed] = useState(false);
   const [micNotice, setMicNotice] = useState('');
-  const lastResult = useRef<PracticeResult | null>(null);
+  const lastResult = useRef<RecordingResult | null>(null);
   const attempt = useRef<AbortController | null>(null);
   const stopRecording = useRef<(() => void) | null>(null);
   const releaseVoice = useRef<(() => void) | null>(null);
@@ -111,7 +112,6 @@ export function useSpeechPractice(
     setLevel(null);
     setState({ kind: 'preparing' });
     soundEngine.playTabClick();
-    warmSpeechAssessment();
 
     const recording = recordSpeech({
       limit: prompt.kind === 'word' ? 3600 : 10000,
@@ -150,7 +150,15 @@ export function useSpeechPractice(
     let assessment: Assessment | undefined;
     if (capture.audio) {
       try {
-        assessment = await assessSpeech(prompt, capture.audio, signal);
+        const scored = await assessSpeech(prompt, capture.audio, signal);
+        if (signal.aborted) return;
+        if (!scored) {
+          const result: RecordingResult = { audio: capture.audio, grade: null };
+          lastResult.current = result;
+          setState({ kind: 'result', result });
+          return;
+        }
+        assessment = scored;
       } catch {
         if (signal.aborted) return;
       }
@@ -175,7 +183,7 @@ export function useSpeechPractice(
     onResult(result);
   };
 
-  const toggleVoice = (result: PracticeResult) => {
+  const toggleVoice = (result: RecordingResult) => {
     if (releaseVoice.current) {
       stopVoice();
       return;
@@ -262,12 +270,13 @@ export function SpeakPractice({ prompt, word, practice, notice, noticeTestId, li
   const { state, playing, playbackFailed, micNotice, subscribeLevel, getLevel } = practice;
   const reducedMotion = useReducedMotion();
   const result = state.kind === 'result' ? state.result : null;
-  const grade = result ? grades[result.grade] : null;
+  const scored = result?.grade ? result : null;
+  const grade = scored ? grades[scored.grade] : null;
   const isPreparing = state.kind === 'preparing';
   const isRecording = state.kind === 'recording';
   const isChecking = state.kind === 'checking';
-  const high = result?.grade === 'great';
-  const low = result?.grade === 'retry';
+  const high = scored?.grade === 'great';
+  const low = scored?.grade === 'retry';
   const activeNotice = notice || micNotice;
   const actionColor = isRecording ? 'bg-rose-600 text-white hover:bg-rose-700'
     : isPreparing || isChecking ? 'bg-amber-100 text-amber-900'
@@ -312,19 +321,19 @@ export function SpeakPractice({ prompt, word, practice, notice, noticeTestId, li
           </p>
         )}
         {isChecking && <p role="status" className="text-center text-xs font-semibold text-amber-800">Scoring pronunciation...</p>}
-        {result && grade && (
-          <div className={`flex min-h-10 w-full items-center justify-between gap-1 rounded-2xl border px-1.5 py-0.5 ${grade.strip}`}>
-            <p role="status" className="flex min-w-0 items-center gap-1 text-[11px] font-semibold sm:gap-1.5 sm:text-xs">
+        {result && (
+          <div className={`flex min-h-10 w-full items-center justify-between gap-1 rounded-2xl border px-1.5 py-0.5 ${grade?.strip ?? grades.retry.strip}`}>
+            {scored && grade ? <p role="status" className="flex min-w-0 items-center gap-1 text-[11px] font-semibold sm:gap-1.5 sm:text-xs">
               <span className={`min-w-6 rounded-lg px-1.5 py-0.5 text-center text-white tabular-nums ${grade.badge}`}>
-                {result.score}<span className="sr-only"> out of 100</span>
+                {scored.score}<span className="sr-only"> out of 100</span>
               </span>
               <span className="inline-flex shrink-0 gap-0.5" aria-hidden="true">
                 {[1, 2, 3].map((star) => <Star key={star} className={`size-3 ${star <= grade.stars ? 'fill-current' : 'opacity-35'}`} />)}
               </span>
               <span className="sr-only">{grade.stars} out of 3 stars</span>
               <span className="truncate">{grade.label}</span>
-              {result.demo && <span className="shrink-0 rounded bg-white/70 px-1 text-[9px] uppercase">Demo</span>}
-            </p>
+              {scored.demo && <span className="shrink-0 rounded bg-white/70 px-1 text-[9px] uppercase">Demo</span>}
+            </p> : <p role="status" className="text-xs font-semibold">Could not score this recording. Try again.</p>}
             <button type="button" onClick={() => practice.toggleVoice(result)} className="inline-flex min-h-8 shrink-0 items-center justify-center gap-1 rounded-full border border-current/20 bg-white/75 px-2 text-[11px] font-semibold cursor-pointer hover:bg-white focus-visible:outline-2 focus-visible:outline-offset-2 sm:text-xs">
               {playing ? <Square className="size-3 fill-current" aria-hidden="true" /> : <Play className="size-3 fill-current" aria-hidden="true" />}
               {playing ? 'Playing' : 'My Voice'}{playing && <VoiceBars />}

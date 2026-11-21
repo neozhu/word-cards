@@ -9,7 +9,7 @@
     "preview": "vite preview",
     "clean": "rm -rf dist server.js",
     "lint": "tsc --noEmit",
-    "test": "tsx --test src/utils/*.test.ts server/*.test.mjs vite.config.test.ts"
+    "test": "tsx --test src/utils/*.test.ts vite.config.test.ts"
   },
   "dependencies": {
     "lucide-react": "^0.546.0",

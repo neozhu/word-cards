@@ -52,27 +52,22 @@ server-side proxy for pronunciation.
 
 ### Speak pronunciation practice
 
-The card front scores the word with Alibaba Cloud's child word model. The back
-scores the story sentence with its child sentence model. Scores below 65 prompt
-another try, 65–84 are good, and 85–100 are great. Recordings play locally.
-Flipping or changing cards clears the current practice session. If recording
-or cloud scoring is unavailable, the result is marked Demo.
+The card front scores the word and the back scores the story sentence using
+[OpenPronounce API](https://github.com/neozhu/openpronounce-api). Scores below
+80 prompt another try, scores from 80 to below 85 are good, and scores of 85
+or higher are great. If OpenPronounce cannot reliably score a recording, the
+card asks for another try and lets the learner play back the recording. If
+recording or the scoring service is unavailable, the result is marked Demo.
+Flipping or changing cards clears the current practice session.
 
-For local development, download the [Alibaba Cloud JavaScript SDK](https://help.aliyun.com/zh/document_detail/2873513.html)
-from the speech assessment project in the console and place `engine.js` and any
-accompanying runtime files in `public/sdk/`. Add `SPEAK_APP_ID` and
-`SPEAK_APP_SECRET` to `.env.local`, plus `SPEAK_LOCAL_CLIENT_IP` with your public
-client IP when testing through localhost. Restart Vite. The browser needs
-HTTPS or localhost to use the microphone.
+For local development, set `OPENPRONOUNCE_API_KEY` in `.env.local` and restart
+Vite. The default service is `https://openpronounce.blazorserver.com`. Set
+`OPENPRONOUNCE_API_URL` to use another base URL without a trailing slash.
+The browser needs HTTPS or localhost to use the microphone.
 
-For deployment with Docker, the container automatically starts
-`server/speak-auth.mjs` and proxies `POST /api/speak/authorize` through Nginx.
-Set `SPEAK_APP_ID` and `SPEAK_APP_SECRET` in the container environment (and
-ensure your HTTPS reverse proxy forwards the real client IP via `X-Real-IP`,
-`X-Forwarded-For`, or `CF-Connecting-IP`). Apply your deployment's access
-controls and rate limits to this route. If deploying static files without the
-Docker image, run `node server/speak-auth.mjs` separately and route
-`POST /api/speak/authorize` to `http://127.0.0.1:4318`.
+Vite and Docker's Nginx forward multipart `POST /api/speak/assess` requests to
+`/api/v1/assess` and add the key server-side as `X-API-Key`. GitHub Pages and
+other static hosts need a same-origin server-side route to provide real scoring.
 
 ## Content
 
@@ -106,11 +101,11 @@ manually rebuild the same commit, use **Pull and redeploy** in Portainer to pick
 up the new image. The application is available on port `8080` by default; change
 the host port in `docker-compose.yml` if needed.
 
-Set `TTS_API_URL`, `TTS_API_KEY`, `SPEAK_APP_ID`, and `SPEAK_APP_SECRET` in the
-deployment environment or a Compose `.env` file. The TTS URL must be reachable
-from the container; for a service on the Docker host, the Compose default is
-`http://host.docker.internal:48731`. Recreate the container after changing these
-values.
+Set `TTS_API_URL`, `TTS_API_KEY`, and `OPENPRONOUNCE_API_KEY` in the deployment
+environment or a Compose `.env` file. You can override `OPENPRONOUNCE_API_URL`
+there as well. For a TTS service on the Docker host, the Compose default is
+`http://host.docker.internal:48731`. Recreate the container after changing
+these values.
 
 ## AI Disclosure
 
